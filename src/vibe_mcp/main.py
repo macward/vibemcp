@@ -6,7 +6,8 @@ import sys
 
 from fastmcp import FastMCP
 
-from vibe_mcp.config import get_config
+from vibe_mcp.auth import get_auth_provider
+from vibe_mcp.config import get_config, reset_config, set_read_only_override
 from vibe_mcp.indexer import Database, Indexer
 from vibe_mcp.prompts import register_prompts
 from vibe_mcp.resources import register_resources
@@ -16,9 +17,21 @@ from vibe_mcp.tools_write import register_tools_write
 logger = logging.getLogger(__name__)
 
 
-def create_server() -> FastMCP:
-    """Create and configure the MCP server with all components."""
+def create_server(read_only: bool | None = None) -> FastMCP:
+    """Create and configure the MCP server with all components.
+
+    Args:
+        read_only: If provided, forces read-only mode regardless of env var.
+    """
+    # Set and apply CLI override if provided
+    if read_only is not None:
+        set_read_only_override(read_only)
+        reset_config()
+
     config = get_config()
+
+    # Get auth provider if configured
+    auth_provider = get_auth_provider()
 
     # Create FastMCP server instance
     mcp = FastMCP(
@@ -28,6 +41,7 @@ def create_server() -> FastMCP:
             "plans, and session logs. Use the search tool to find relevant content "
             "across all projects, or use resources to browse specific projects and files."
         ),
+        auth=auth_provider,
     )
 
     # Initialize database and indexer
@@ -76,7 +90,16 @@ def main() -> None:
         action="store_true",
         help="Force reindex of all projects before starting",
     )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="Run in read-only mode (disable write tools)",
+    )
     args = parser.parse_args()
+
+    # Set CLI override for read-only mode
+    if args.read_only:
+        set_read_only_override(True)
 
     config = get_config()
 
@@ -86,6 +109,8 @@ def main() -> None:
     logger.info("  VIBE_ROOT: %s", config.vibe_root)
     logger.info("  VIBE_PORT: %s", config.vibe_port)
     logger.info("  VIBE_DB:   %s", config.vibe_db)
+    logger.info("  AUTH:      %s", "enabled" if config.auth_token else "disabled")
+    logger.info("  READ_ONLY: %s", config.read_only)
     logger.info("=" * 50)
 
     # Force reindex if requested

@@ -1,6 +1,6 @@
 # vibemcp
 
-A modern Python project.
+MCP server that exposes the `.vibe` workspace system for AI agents.
 
 ## Setup
 
@@ -37,17 +37,63 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-## Usage
+## Configuration
 
-```python
-from main import main
+### Environment Variables
 
-main()
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VIBE_ROOT` | `~/.vibe` | Root directory for vibe workspaces |
+| `VIBE_PORT` | `8080` | Server port |
+| `VIBE_DB` | `~/.vibe/index.db` | SQLite database path |
+| `VIBE_AUTH_TOKEN` | (none) | Bearer token for authentication (min 32 chars) |
+| `VIBE_READ_ONLY` | `false` | Enable read-only mode |
+
+### Authentication
+
+To enable authentication, set the `VIBE_AUTH_TOKEN` environment variable:
+
+```bash
+# Generate a secure token (32+ characters required)
+export VIBE_AUTH_TOKEN=$(openssl rand -hex 32)
+
+# Start the server
+uv run python -m vibe_mcp.main
 ```
 
-Or run directly:
+Clients must include the token in the `Authorization` header:
+
+```
+Authorization: Bearer <token>
+```
+
+Requests without a valid token will receive a 401 Unauthorized response.
+
+### Read-Only Mode
+
+To run the server in read-only mode (disables all write tools):
+
 ```bash
-python src/main.py
+# Via CLI flag
+uv run python -m vibe_mcp.main --read-only
+
+# Or via environment variable
+VIBE_READ_ONLY=true uv run python -m vibe_mcp.main
+```
+
+In read-only mode, write operations (create_task, log_session, etc.) will be rejected.
+
+## Usage
+
+```bash
+# Start the server
+uv run python -m vibe_mcp.main
+
+# Force reindex on startup
+uv run python -m vibe_mcp.main --reindex
+
+# Start in read-only mode
+uv run python -m vibe_mcp.main --read-only
 ```
 
 ## Project Structure
