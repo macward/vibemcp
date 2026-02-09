@@ -317,6 +317,28 @@ class TestSearch:
         assert len(results) > 0
         assert any("JWT" in r.content or "JWT" in (r.heading or "") for r in results)
 
+    def test_search_returns_snippet(self, indexed_db: Database):
+        results = indexed_db.search("JWT")
+        assert len(results) > 0
+
+        result = results[0]
+        # Snippet should exist and contain highlighted match
+        assert result.snippet is not None
+        assert ">>>" in result.snippet and "<<<" in result.snippet
+        # JWT should be highlighted in the snippet
+        assert ">>>JWT<<<" in result.snippet or "JWT" in result.snippet
+
+    def test_snippet_shows_context(self, indexed_db: Database):
+        results = indexed_db.search("authentication")
+        assert len(results) > 0
+
+        result = results[0]
+        # Snippet should have highlighted text
+        assert ">>>" in result.snippet
+        assert "<<<" in result.snippet
+        # Snippet should contain the search term highlighted
+        assert ">>>authentication<<<" in result.snippet
+
     def test_search_returns_ranking_info(self, indexed_db: Database):
         results = indexed_db.search("authentication")
         assert len(results) > 0

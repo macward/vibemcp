@@ -47,7 +47,7 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
             - document_path: Path to the document
             - folder: Folder containing the document (tasks/plans/sessions/etc)
             - heading: Section heading where match was found
-            - content: Matching content chunk
+            - snippet: Contextual snippet with matches highlighted (>>>match<<<)
             - score: Relevance score (higher is better)
         """
         results = db.search(query=query, project_name=project, limit=limit)
@@ -58,7 +58,7 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
                 "document_path": result.document_path,
                 "folder": result.folder,
                 "heading": result.heading,
-                "content": result.content,
+                "snippet": result.snippet,
                 "score": round(result.final_score, 2),
             }
             for result in results

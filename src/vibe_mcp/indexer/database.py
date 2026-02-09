@@ -114,6 +114,13 @@ INSERT OR REPLACE INTO meta (key, value) VALUES ('created_at', datetime('now'));
 class Database:
     """SQLite database for the vibe index."""
 
+    # Snippet configuration for FTS5 search results
+    SNIPPET_COLUMN_INDEX = 0  # content is the first column in chunks_fts
+    SNIPPET_HIGHLIGHT_START = ">>>"
+    SNIPPET_HIGHLIGHT_END = "<<<"
+    SNIPPET_ELLIPSIS = "..."
+    SNIPPET_MAX_TOKENS = 64
+
     def __init__(self, db_path: Path):
         """Initialize database connection."""
         self.db_path = db_path
@@ -434,6 +441,9 @@ class Database:
         """
         Search for chunks matching the query with ranking.
 
+        Returns contextual snippets using FTS5 snippet() function instead
+        of full chunk content.
+
         Ranking combines:
         - BM25 score from FTS5
         - Type boost (tasks > plans > sessions > ...)
@@ -441,7 +451,13 @@ class Database:
         - Heading boost (priority headings score higher)
         - Status boost (in-progress > blocked > pending > done)
         """
-        search_query = """
+        # Build snippet function with configured parameters
+        snippet_func = (
+            f"snippet(chunks_fts, {self.SNIPPET_COLUMN_INDEX}, "
+            f"'{self.SNIPPET_HIGHLIGHT_START}', '{self.SNIPPET_HIGHLIGHT_END}', "
+            f"'{self.SNIPPET_ELLIPSIS}', {self.SNIPPET_MAX_TOKENS})"
+        )
+        search_query = f"""
             SELECT
                 c.id as chunk_id,
                 c.document_id,
@@ -450,6 +466,7 @@ class Database:
                 d.folder,
                 c.heading,
                 c.content,
+                {snippet_func} as snippet,
                 bm25(chunks_fts) as bm25_score,
                 CASE
                     WHEN d.path LIKE '%/status.md' OR d.path LIKE '%status.md' THEN 3.0
@@ -522,6 +539,7 @@ class Database:
                         folder=row["folder"],
                         heading=row["heading"],
                         content=row["content"],
+                        snippet=row["snippet"],
                         bm25_score=row["bm25_score"],
                         type_boost=row["type_boost"],
                         recency_boost=row["recency_boost"],
