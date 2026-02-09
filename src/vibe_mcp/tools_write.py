@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from vibe_mcp.config import get_config
-from vibe_mcp.indexer.indexer import Indexer
+from vibe_mcp.indexer import Indexer
 from vibe_mcp.indexer.walker import FileInfo, compute_hash
 
 logger = logging.getLogger(__name__)
@@ -376,9 +376,9 @@ def update_task_status(project: str, task_file: str, new_status: str) -> dict:
     content = file_path.read_text(encoding="utf-8")
 
     # Update status line
-    # Match "Status: <anything>" and replace with new status
+    # Match "Status: <anything until end of line>" to support statuses with hyphens (e.g., in-progress)
     updated_content = re.sub(
-        r"^Status:\s*\w+",
+        r"^Status:.*$",
         f"Status: {new_status}",
         content,
         count=1,

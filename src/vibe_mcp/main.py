@@ -13,11 +13,6 @@ from vibe_mcp.resources import register_resources
 from vibe_mcp.tools import register_tools
 from vibe_mcp.tools_write import register_tools_write
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +64,12 @@ def create_server() -> FastMCP:
 
 def main() -> None:
     """Main function - starts the MCP server."""
+    # Configure logging here to avoid side effects on import
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
     parser = argparse.ArgumentParser(description="vibeMCP - MCP server for vibe workspaces")
     parser.add_argument(
         "--reindex",
@@ -103,8 +104,8 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
         sys.exit(0)
-    except Exception as e:
-        logger.error("Server error: %s", e)
+    except Exception:
+        logger.exception("Server error")
         sys.exit(1)
 
 

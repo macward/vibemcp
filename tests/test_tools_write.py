@@ -304,6 +304,32 @@ class TestUpdateTaskStatus:
         with pytest.raises(ValueError, match="not found"):
             update_task_status("test_project", "999-nonexistent.md", "done")
 
+    def test_update_task_status_from_hyphenated_status(self, test_vibe_root):
+        """Test updating from a status with hyphen (e.g., in-progress).
+
+        Regression test: the original regex r'^Status:\\s*\\w+' didn't match
+        statuses containing hyphens, causing duplicate Status lines.
+        """
+        create_task(
+            project="test_project",
+            title="Hyphen Status Test",
+            objective="Test hyphenated status replacement",
+        )
+
+        # Set to in-progress first
+        update_task_status("test_project", "001-hyphen-status-test.md", "in-progress")
+
+        # Now update from in-progress to blocked (both have hyphens or not)
+        update_task_status("test_project", "001-hyphen-status-test.md", "blocked")
+
+        file_path = test_vibe_root / "test_project" / "tasks" / "001-hyphen-status-test.md"
+        content = file_path.read_text()
+
+        # Should have exactly one Status line with the new value
+        assert "Status: blocked" in content
+        assert "Status: in-progress" not in content
+        assert content.count("Status:") == 1, "Should have exactly one Status line"
+
 
 class TestCreatePlan:
     """Tests for create_plan function."""
