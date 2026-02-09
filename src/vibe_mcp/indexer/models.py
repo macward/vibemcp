@@ -59,6 +59,7 @@ class SearchResult:
     folder: str
     heading: str | None
     content: str
+    snippet: str  # Contextual snippet with match highlighted
     bm25_score: float
     type_boost: float
     recency_boost: float
