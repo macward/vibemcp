@@ -531,3 +531,82 @@ def reindex() -> dict:
         "status": "reindexed",
         "document_count": count,
     }
+
+
+def register_tools_write(mcp) -> None:
+    """Register all write tools with the FastMCP server.
+
+    Args:
+        mcp: FastMCP server instance
+    """
+
+    @mcp.tool()
+    def tool_create_task(
+        project: str,
+        title: str,
+        objective: str,
+        steps: list[str] | None = None,
+    ) -> dict:
+        """Create a new task with auto-generated number and standard format.
+
+        Args:
+            project: Project name
+            title: Task title
+            objective: Task objective
+            steps: Optional list of steps
+
+        Returns:
+            Dict with status, task number, and file path
+        """
+        return create_task(project, title, objective, steps)
+
+    @mcp.tool()
+    def tool_log_session(project: str, content: str) -> dict:
+        """Create or append to a session log for today.
+
+        Args:
+            project: Project name
+            content: Session content to log
+
+        Returns:
+            Dict with status and file path
+        """
+        return log_session(project, content)
+
+    @mcp.tool()
+    def tool_update_task_status(project: str, task_file: str, new_status: str) -> dict:
+        """Update the status of a task.
+
+        Args:
+            project: Project name
+            task_file: Task filename (e.g., "001-example.md")
+            new_status: New status (pending, in-progress, done, blocked)
+
+        Returns:
+            Dict with status and file path
+        """
+        return update_task_status(project, task_file, new_status)
+
+    @mcp.tool()
+    def tool_create_doc(project: str, folder: str, filename: str, content: str) -> dict:
+        """Create a new document in a project folder.
+
+        Args:
+            project: Project name
+            folder: Folder name (e.g., "tasks", "plans", "sessions")
+            filename: File name (will add .md if not present)
+            content: Document content
+
+        Returns:
+            Dict with status and file path
+        """
+        return create_doc(project, folder, filename, content)
+
+    @mcp.tool()
+    def tool_reindex() -> dict:
+        """Force a full reindex of all projects.
+
+        Returns:
+            Dict with status and document count
+        """
+        return reindex()
