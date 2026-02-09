@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from vibe_mcp.auth import check_write_permission
 from vibe_mcp.config import get_config
 from vibe_mcp.indexer import Indexer
 from vibe_mcp.indexer.walker import FileInfo, compute_hash
@@ -177,7 +178,9 @@ def create_doc(project: str, folder: str, filename: str, content: str) -> dict:
 
     Raises:
         ValueError: If path is invalid or file already exists
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     config = get_config()
 
     # Validate project path
@@ -221,7 +224,9 @@ def update_doc(project: str, path: str, content: str) -> dict:
 
     Raises:
         ValueError: If path is invalid or file doesn't exist
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     config = get_config()
 
     # Validate project path
@@ -276,7 +281,9 @@ def create_task(
 
     Raises:
         ValueError: If path is invalid
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     config = get_config()
 
     # Validate project path
@@ -349,7 +356,9 @@ def update_task_status(project: str, task_file: str, new_status: str) -> dict:
 
     Raises:
         ValueError: If path is invalid, file doesn't exist, or status is invalid
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     valid_statuses = {"pending", "in-progress", "done", "blocked"}
     if new_status not in valid_statuses:
         raise ValueError(
@@ -429,7 +438,9 @@ def create_plan(project: str, content: str) -> dict:
 
     Raises:
         ValueError: If path is invalid
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     config = get_config()
 
     # Validate project path
@@ -472,7 +483,9 @@ def log_session(project: str, content: str) -> dict:
 
     Raises:
         ValueError: If path is invalid
+        AuthError: If server is in read-only mode
     """
+    check_write_permission()
     config = get_config()
 
     # Validate project path
