@@ -18,7 +18,156 @@ vibeMCP (FastMCP + SSE)
 
 ---
 
-## Prerequisites
+## Docker Deployment
+
+The fastest way to deploy vibeMCP is using Docker.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Your `~/.vibe` workspace directory
+
+### Quick Start
+
+1. **Clone the repository:**
+
+```bash
+git clone https://github.com/your-username/vibeMCP.git
+cd vibeMCP
+```
+
+2. **Configure environment:**
+
+```bash
+# Copy example env file
+cp .env.example .env
+
+# Generate a secure auth token
+echo "VIBE_AUTH_TOKEN=$(openssl rand -hex 32)" >> .env
+```
+
+3. **Build and run:**
+
+```bash
+# Build the image
+docker compose build
+
+# Start the container
+docker compose up -d
+
+# Check logs
+docker compose logs -f
+```
+
+4. **Verify:**
+
+```bash
+# Check health
+curl http://localhost:8288/
+
+# Test with auth (if configured)
+curl http://localhost:8288/ -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Docker Configuration
+
+The `docker-compose.yml` mounts your local `~/.vibe` directory to `/data` in the container:
+
+```yaml
+services:
+  vibemcp:
+    build: .
+    ports:
+      - "127.0.0.1:8288:8288"
+    volumes:
+      - ~/.vibe:/data
+    environment:
+      - VIBE_ROOT=/data
+      - VIBE_DB=/data/index.db
+      - VIBE_AUTH_TOKEN=${VIBE_AUTH_TOKEN}
+      - VIBE_READ_ONLY=${VIBE_READ_ONLY:-false}
+    restart: unless-stopped
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VIBE_ROOT` | Workspace directory inside container | `/data` |
+| `VIBE_DB` | SQLite database path | `/data/index.db` |
+| `VIBE_PORT` | Server port | `8288` |
+| `VIBE_AUTH_TOKEN` | Bearer token for authentication | (none) |
+| `VIBE_READ_ONLY` | Disable write operations | `false` |
+
+### Building Manually
+
+```bash
+# Build the image
+docker build -t vibemcp .
+
+# Run with custom options
+docker run -d \
+  --name vibemcp \
+  -p 127.0.0.1:8288:8288 \
+  -v ~/.vibe:/data \
+  -e VIBE_AUTH_TOKEN="your-token-here" \
+  vibemcp
+```
+
+### Docker with Caddy
+
+For HTTPS with automatic certificates, use Caddy as reverse proxy:
+
+```yaml
+# docker-compose.prod.yml
+services:
+  vibemcp:
+    build: .
+    expose:
+      - "8288"
+    volumes:
+      - ~/.vibe:/data
+    environment:
+      - VIBE_ROOT=/data
+      - VIBE_AUTH_TOKEN=${VIBE_AUTH_TOKEN}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - vibemcp
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+### Updating
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Rebuild and restart
+docker compose build
+docker compose up -d
+```
+
+---
+
+## Manual Server Setup
+
+For more control, deploy vibeMCP directly on a VPS.
+
+### Prerequisites
 
 - VPS with Ubuntu 22.04+ (DigitalOcean, Fly.io, Linode, etc.)
 - Domain name pointed to your VPS IP
@@ -97,7 +246,7 @@ Create `/home/vibemcp/.env`:
 ```bash
 # vibeMCP Configuration
 VIBE_ROOT=/home/vibemcp/.vibe
-VIBE_PORT=8080
+VIBE_PORT=8288
 VIBE_DB=/home/vibemcp/.vibe/index.db
 
 # Authentication (generate a secure token)
@@ -166,7 +315,7 @@ Create `/etc/caddy/Caddyfile`:
 ```caddy
 vibe.yourdomain.com {
     # Reverse proxy to vibeMCP
-    reverse_proxy localhost:8080
+    reverse_proxy localhost:8288
 
     # Enable compression
     encode gzip
@@ -226,7 +375,7 @@ cd /home/vibemcp/.vibe
 git pull origin main
 
 # Trigger reindex
-curl -X POST http://localhost:8080/reindex \
+curl -X POST http://localhost:8288/reindex \
   -H "Authorization: Bearer $VIBE_AUTH_TOKEN" \
   -H "Content-Type: application/json"
 
@@ -312,7 +461,7 @@ vibe.yourdomain.com {
         }
     }
 
-    reverse_proxy localhost:8080
+    reverse_proxy localhost:8288
 }
 ```
 
@@ -367,7 +516,7 @@ Caddy handles SSE connections automatically. For long-running connections, ensur
 
 ```caddy
 vibe.yourdomain.com {
-    reverse_proxy localhost:8080 {
+    reverse_proxy localhost:8288 {
         # Disable buffering for SSE
         flush_interval -1
     }
@@ -471,7 +620,7 @@ sudo systemctl restart vibemcp
 sudo systemctl status vibemcp
 
 # Check if port is open
-ss -tlnp | grep 8080
+ss -tlnp | grep 8288
 
 # Check Caddy
 sudo systemctl status caddy

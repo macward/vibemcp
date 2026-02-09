@@ -1,0 +1,21 @@
+services:
+  vibemcp:
+    build: .
+    container_name: vibemcp
+    ports:
+      - "127.0.0.1:8288:8288"
+    volumes:
+      - ~/.vibe:/data
+    environment:
+      - VIBE_ROOT=/data
+      - VIBE_DB=/data/index.db
+      - VIBE_PORT=8288
+      - VIBE_AUTH_TOKEN=${VIBE_AUTH_TOKEN}
+      - VIBE_READ_ONLY=${VIBE_READ_ONLY:-false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8288/')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
