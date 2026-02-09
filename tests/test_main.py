@@ -1,10 +1,11 @@
 """Tests for main module."""
 
-from main import main
+from vibe_mcp.main import main
 
 
 def test_main(capsys):
-    """Test main function."""
+    """Test main function prints startup message."""
     main()
     captured = capsys.readouterr()
-    assert "Hello from vibemcp!" in captured.out
+    assert "vibemcp starting" in captured.out
+    assert "VIBE_ROOT" in captured.out
