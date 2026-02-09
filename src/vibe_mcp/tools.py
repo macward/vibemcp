@@ -7,10 +7,13 @@ This module defines the tools exposed by the MCP server:
 - get_plan: Read execution plan for a project
 """
 
+from datetime import datetime
+
 from fastmcp import FastMCP
 
 from vibe_mcp.config import get_config
 from vibe_mcp.indexer import Database
+from vibe_mcp.indexer.parser import parse_frontmatter
 
 
 def register_tools(mcp: FastMCP, db: Database) -> None:
@@ -65,23 +68,28 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         ]
 
     @mcp.tool()
-    def read_doc(project: str, path: str) -> dict:
+    def read_doc(project: str, folder: str, filename: str) -> dict:
         """Read a complete document from a project.
 
         Args:
             project: Name of the project
-            path: Relative path within the project (e.g., "tasks/001-setup.md")
+            folder: Folder containing the document (tasks, plans, sessions, etc.)
+            filename: Name of the file (e.g., "001-setup.md")
 
         Returns:
             Document with:
             - project: Project name
-            - path: Document path
+            - folder: Folder containing the document
+            - filename: Name of the file
+            - path: Full relative path (project/folder/filename)
+            - metadata: Document metadata (type, status, updated, tags, owner)
             - content: Full document content
             - exists: Whether document was found
             - error: Error message if document not found
         """
         config = get_config()
-        full_path = config.vibe_root / project / path
+        full_path = config.vibe_root / project / folder / filename
+        relative_path = f"{project}/{folder}/{filename}"
 
         # Validate path is within VIBE_ROOT (security check)
         try:
@@ -89,7 +97,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
             if not str(full_path).startswith(str(config.vibe_root.resolve())):
                 return {
                     "project": project,
-                    "path": path,
+                    "folder": folder,
+                    "filename": filename,
+                    "path": relative_path,
+                    "metadata": None,
                     "content": None,
                     "exists": False,
                     "error": "Path is outside VIBE_ROOT",
@@ -97,7 +108,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         except (ValueError, OSError) as e:
             return {
                 "project": project,
-                "path": path,
+                "folder": folder,
+                "filename": filename,
+                "path": relative_path,
+                "metadata": None,
                 "content": None,
                 "exists": False,
                 "error": f"Invalid path: {e}",
@@ -107,7 +121,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         if not full_path.exists():
             return {
                 "project": project,
-                "path": path,
+                "folder": folder,
+                "filename": filename,
+                "path": relative_path,
+                "metadata": None,
                 "content": None,
                 "exists": False,
                 "error": "Document not found",
@@ -116,7 +133,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         if not full_path.is_file():
             return {
                 "project": project,
-                "path": path,
+                "folder": folder,
+                "filename": filename,
+                "path": relative_path,
+                "metadata": None,
                 "content": None,
                 "exists": False,
                 "error": "Path is not a file",
@@ -124,9 +144,28 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
 
         try:
             content = full_path.read_text(encoding="utf-8")
+
+            # Parse frontmatter to get metadata
+            frontmatter, _ = parse_frontmatter(content, relative_path)
+
+            # Get file modification time for updated field
+            mtime = full_path.stat().st_mtime
+            updated = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+
+            metadata = {
+                "type": frontmatter.type,
+                "status": frontmatter.status,
+                "updated": frontmatter.updated or updated,
+                "tags": frontmatter.tags or [],
+                "owner": frontmatter.owner,
+            }
+
             return {
                 "project": project,
-                "path": path,
+                "folder": folder,
+                "filename": filename,
+                "path": relative_path,
+                "metadata": metadata,
                 "content": content,
                 "exists": True,
                 "error": None,
@@ -134,7 +173,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         except Exception as e:
             return {
                 "project": project,
-                "path": path,
+                "folder": folder,
+                "filename": filename,
+                "path": relative_path,
+                "metadata": None,
                 "content": None,
                 "exists": True,
                 "error": f"Error reading file: {e}",
@@ -202,39 +244,90 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         return results
 
     @mcp.tool()
-    def get_plan(project: str) -> dict:
+    def get_plan(project: str, filename: str = "execution-plan.md") -> dict:
         """Read the execution plan for a project.
 
         Args:
             project: Name of the project
+            filename: Name of the plan file (default: "execution-plan.md")
 
         Returns:
             Plan document with:
             - project: Project name
-            - content: Plan content (if exists)
+            - filename: Plan filename
+            - path: Full relative path (project/plans/filename)
             - exists: Whether plan was found
+            - metadata: Document metadata (type, updated)
+            - content: Plan content (if exists)
         """
         config = get_config()
-        plan_path = config.vibe_root / project / "plans" / "execution-plan.md"
+        plan_path = config.vibe_root / project / "plans" / filename
+        relative_path = f"{project}/plans/{filename}"
+
+        # Validate path is within VIBE_ROOT (security check)
+        try:
+            plan_path = plan_path.resolve()
+            if not str(plan_path).startswith(str(config.vibe_root.resolve())):
+                return {
+                    "project": project,
+                    "filename": filename,
+                    "path": relative_path,
+                    "exists": False,
+                    "metadata": None,
+                    "content": None,
+                    "error": "Path is outside VIBE_ROOT",
+                }
+        except (ValueError, OSError) as e:
+            return {
+                "project": project,
+                "filename": filename,
+                "path": relative_path,
+                "exists": False,
+                "metadata": None,
+                "content": None,
+                "error": f"Invalid path: {e}",
+            }
 
         if not plan_path.exists():
             return {
                 "project": project,
-                "content": None,
+                "filename": filename,
+                "path": relative_path,
                 "exists": False,
+                "metadata": None,
+                "content": None,
             }
 
         try:
             content = plan_path.read_text(encoding="utf-8")
+
+            # Parse frontmatter to get metadata
+            frontmatter, _ = parse_frontmatter(content, relative_path)
+
+            # Get file modification time for updated field
+            mtime = plan_path.stat().st_mtime
+            updated = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+
+            metadata = {
+                "type": frontmatter.type or "plan",
+                "updated": frontmatter.updated or updated,
+            }
+
             return {
                 "project": project,
-                "content": content,
+                "filename": filename,
+                "path": relative_path,
                 "exists": True,
+                "metadata": metadata,
+                "content": content,
             }
         except Exception as e:
             return {
                 "project": project,
-                "content": None,
+                "filename": filename,
+                "path": relative_path,
                 "exists": False,
+                "metadata": None,
+                "content": None,
                 "error": f"Error reading plan: {e}",
             }
