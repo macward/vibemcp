@@ -280,22 +280,187 @@ El execution plan documenta las dependencias entre tareas y el orden de ejecuci�
 
 ### Frontmatter YAML (opcional)
 
-Cualquier archivo puede incluir frontmatter YAML opcional:
+Cualquier archivo `.md` puede incluir un bloque YAML frontmatter opcional al inicio del archivo. El frontmatter está delimitado por `---` y debe ser lo primero en el archivo (sin líneas en blanco antes).
+
+**Todos los campos son opcionales.** El sistema funciona igual de bien con o sin frontmatter — el indexador infiere metadata por path cuando no existe.
+
+#### Schema de Campos
+
+| Campo | Tipo | Descripción | Ejemplo |
+|-------|------|-------------|---------|
+| `project` | `string` | Nombre del proyecto | `"vibeMCP"` |
+| `type` | `enum` | Tipo de documento | `"task"`, `"plan"`, `"session"`, `"report"`, `"changelog"`, `"reference"`, `"scratch"`, `"asset"` |
+| `updated` | `date` | Fecha de última actualización | `2025-02-09` |
+| `tags` | `list[string]` | Etiquetas para búsqueda y clasificación | `[backend, api, auth]` |
+| `status` | `enum` | Estado del documento (principalmente para tasks) | `"pending"`, `"in-progress"`, `"done"`, `"blocked"` |
+| `owner` | `string` | Persona o agente responsable | `"max"`, `"claude"` |
+
+#### Tipos de Datos
+
+- **string**: Texto libre. Si contiene caracteres especiales, usar comillas: `"mi: valor"`
+- **date**: Formato ISO 8601: `YYYY-MM-DD` (ej. `2025-02-09`)
+- **enum**: Valor de un conjunto predefinido (ver tabla arriba)
+- **list[string]**: Lista de strings en formato YAML inline `[tag1, tag2]` o multilinea:
+  ```yaml
+  tags:
+    - backend
+    - api
+    - auth
+  ```
+
+#### Reglas de Inferencia por Path
+
+Cuando un archivo **no tiene frontmatter** (o le faltan campos), el indexador infiere metadata automáticamente basándose en la ubicación del archivo:
+
+| Campo | Regla de Inferencia |
+|-------|---------------------|
+| `project` | Nombre del directorio inmediatamente después de `~/.vibe/`. Ej: `~/.vibe/vibeMCP/tasks/001.md` → `project: vibeMCP` |
+| `type` | Nombre de la carpeta contenedora (singularizado). Ej: `tasks/` → `task`, `plans/` → `plan`, `sessions/` → `session` |
+| `updated` | Fecha de modificación del archivo (mtime del filesystem) |
+| `tags` | Lista vacía `[]` |
+| `status` | Para archivos en `tasks/`: se busca patrón `Status: <valor>` en línea 3 del cuerpo (case-insensitive). Para otras carpetas: `null` |
+| `owner` | `null` (no se infiere) |
+
+**Mapeo de carpetas a tipos:**
+
+| Carpeta | Tipo Inferido |
+|---------|---------------|
+| `tasks/` | `task` |
+| `plans/` | `plan` |
+| `sessions/` | `session` |
+| `reports/` | `report` |
+| `changelog/` | `changelog` |
+| `references/` | `reference` |
+| `scratch/` | `scratch` |
+| `assets/` | `asset` |
+
+> **Nota**: Solo archivos `.md` son indexados. Archivos binarios en `assets/` (imágenes, diagramas, configs) no se procesan.
+
+#### Precedencia: Frontmatter vs Inferencia
+
+El indexador usa la siguiente precedencia:
+
+1. **Frontmatter explícito** — si el campo existe en frontmatter, usa ese valor
+2. **Inferencia por path** — si no existe en frontmatter, infiere por ubicación
+3. **Valor por defecto** — si no se puede inferir, usa `null` o valor vacío
+
+```
+┌─────────────────────────────┐
+│ Archivo tiene frontmatter?  │
+└─────────────┬───────────────┘
+              │
+     ┌────────┴────────┐
+     │                 │
+    Sí                No
+     │                 │
+     ▼                 ▼
+┌─────────────┐  ┌─────────────────┐
+│ Campo X     │  │ Inferir todos   │
+│ en YAML?    │  │ los campos por  │
+└──────┬──────┘  │ path            │
+       │         └─────────────────┘
+  ┌────┴────┐
+  │         │
+ Sí        No
+  │         │
+  ▼         ▼
+┌──────┐  ┌──────────┐
+│ Usar │  │ Inferir  │
+│ YAML │  │ por path │
+└──────┘  └──────────┘
+```
+
+#### Ejemplos
+
+**Archivo CON frontmatter completo:**
 
 ```yaml
 ---
-project: nombre-proyecto
-type: task | plan | session | report
+project: vibeMCP
+type: task
 updated: 2025-02-09
-tags: [backend, api]
-status: pending | in-progress | done
-owner: nombre
+tags: [indexer, sqlite, fts5]
+status: in-progress
+owner: claude
 ---
+# Task: Implementar indexador SQLite
+
+...contenido...
 ```
 
-Si no hay frontmatter, el indexador infiere metadata por path:
-- `type` = nombre de la carpeta (tasks → task, plans → plan, etc.)
-- `project` = nombre del directorio padre en `~/.vibe/`
+**Archivo CON frontmatter parcial:**
+
+```yaml
+---
+tags: [urgente, hotfix]
+owner: max
+---
+# Fix crítico en autenticación
+
+...contenido...
+```
+
+En este caso:
+- `project` → inferido de path (`vibeMCP`)
+- `type` → inferido de carpeta (`scratch`)
+- `updated` → inferido de mtime
+- `tags` → del frontmatter: `[urgente, hotfix]`
+- `status` → `null`
+- `owner` → del frontmatter: `max`
+
+**Archivo SIN frontmatter:**
+
+```markdown
+# Session 2025-02-09
+
+## Lo que hice hoy
+
+- Avancé con el indexador
+- Debuggeé problema de encoding
+```
+
+Ubicado en `~/.vibe/vibeMCP/sessions/2025-02-09.md`:
+- `project` → `vibeMCP`
+- `type` → `session`
+- `updated` → mtime del archivo
+- `tags` → `[]`
+- `status` → `null`
+- `owner` → `null`
+
+#### Uso por el Indexador
+
+El indexador procesa archivos así:
+
+1. Lee el archivo completo
+2. Detecta si empieza con `---` (frontmatter presente)
+3. Si hay frontmatter, parsea YAML y extrae campos
+4. Para campos faltantes, aplica inferencia por path
+5. Almacena metadata en SQLite junto con el contenido indexado
+6. El contenido se indexa para FTS5 **sin** el frontmatter
+
+**Ejemplo de registro en SQLite:**
+
+```sql
+-- Tabla: documents
+INSERT INTO documents (path, project, type, updated, tags, status, owner, content)
+VALUES (
+  'vibeMCP/tasks/001-setup.md',
+  'vibeMCP',           -- de frontmatter o inferido
+  'task',              -- de frontmatter o inferido
+  '2025-02-09',        -- de frontmatter o mtime
+  '["setup", "init"]', -- de frontmatter o []
+  'done',              -- de frontmatter o null
+  'max',               -- de frontmatter o null
+  '# Task: Setup...'   -- contenido sin frontmatter
+);
+```
+
+#### Notas de Implementación
+
+- El parser YAML debe ser tolerante a errores. Si el frontmatter está malformado, tratar como si no existiera y loguear warning.
+- Las fechas en formato incorrecto deben caer back a mtime.
+- Los tags se normalizan a lowercase.
+- El campo `status` en frontmatter tiene precedencia sobre `Status:` en el cuerpo del documento (para tasks).
 
 ---
 
