@@ -1,6 +1,6 @@
 """Tests for main module."""
 
-from vibemcp.main import main
+from main import main
 
 
 def test_main(capsys):

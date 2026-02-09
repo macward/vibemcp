@@ -40,21 +40,21 @@ uv run ruff format .
 ## Usage
 
 ```python
-from vibemcp.main import main
+from main import main
 
 main()
 ```
 
 Or run directly:
 ```bash
-python src/vibemcp/main.py
+python src/main.py
 ```
 
 ## Project Structure
 
 ```
 vibemcp/
-├── src/vibemcp/          # Source code
+├── src/                  # Source code
 │   ├── __init__.py
 │   └── main.py
 ├── tests/                # Tests

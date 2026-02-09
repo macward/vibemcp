@@ -1,0 +1,3 @@
+# vibeMCP
+
+vibe: vibeMCP
