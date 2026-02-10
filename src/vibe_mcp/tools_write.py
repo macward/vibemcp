@@ -546,6 +546,68 @@ def reindex() -> dict:
     }
 
 
+def init_project(project: str) -> dict:
+    """
+    Initialize a new project with standard directory structure.
+
+    Creates ~/.vibe/<project>/ with folders:
+    tasks, plans, sessions, reports, changelog, references, scratch, assets
+
+    Args:
+        project: Project name (no slashes, no ..)
+
+    Returns:
+        Dict with status, project name, and paths
+
+    Raises:
+        ValueError: If project name is invalid or already exists
+        AuthError: If server is in read-only mode
+    """
+    check_write_permission()
+    config = get_config()
+
+    # Validate project name (prevents directory traversal)
+    project_path = _validate_project_path(project, config.vibe_root)
+
+    # Check if project already exists
+    if project_path.exists():
+        raise ValueError(f"Project already exists: {project}")
+
+    # Standard folder structure
+    folders = [
+        "tasks",
+        "plans",
+        "sessions",
+        "reports",
+        "changelog",
+        "references",
+        "scratch",
+        "assets",
+    ]
+
+    # Create project directory and all standard folders
+    for folder in folders:
+        (project_path / folder).mkdir(parents=True, exist_ok=True)
+
+    # Create initial status.md
+    status_path = project_path / "status.md"
+    status_content = f"# {project}\n\nStatus: setup\n"
+    status_path.write_text(status_content, encoding="utf-8")
+
+    # Reindex the status file
+    _reindex_file(status_path)
+
+    logger.info("Initialized project: %s", project)
+
+    return {
+        "status": "initialized",
+        "project": project,
+        "path": str(project_path.relative_to(config.vibe_root)),
+        "absolute_path": str(project_path),
+        "folders": folders,
+    }
+
+
 def register_tools_write(mcp) -> None:
     """Register all write tools with the FastMCP server.
 
@@ -623,3 +685,18 @@ def register_tools_write(mcp) -> None:
             Dict with status and document count
         """
         return reindex()
+
+    @mcp.tool()
+    def tool_init_project(project: str) -> dict:
+        """Initialize a new project with standard directory structure.
+
+        Creates ~/.vibe/<project>/ with folders:
+        tasks, plans, sessions, reports, changelog, references, scratch, assets
+
+        Args:
+            project: Project name (no slashes, no ..)
+
+        Returns:
+            Dict with status, project name, and paths
+        """
+        return init_project(project)

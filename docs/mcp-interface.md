@@ -17,9 +17,9 @@ Definición completa de la interfaz MCP del servidor vibeMCP: resources para lec
 ├─────────────────────────────────────────────────────────────────┤
 │  TOOLS                                                          │
 │  ├── Lectura: search, read_doc, list_tasks, get_plan            │
-│  └── Escritura: create_doc, update_doc, create_task,            │
-│                 update_task_status, create_plan, log_session,    │
-│                 reindex                                          │
+│  ├── Escritura: create_doc, update_doc, create_task,            │
+│  │              update_task_status, create_plan, log_session    │
+│  └── Admin: init_project, reindex                               │
 ├─────────────────────────────────────────────────────────────────┤
 │  PROMPTS (templates)                                            │
 │  └── project_briefing, session_start                            │
@@ -201,7 +201,7 @@ Contenido de un archivo específico.
 |-----------|-------|-------------|
 | **Lectura** | search, read_doc, list_tasks, get_plan | Solo consultan datos, no modifican filesystem |
 | **Escritura** | create_doc, update_doc, create_task, update_task_status, create_plan, log_session | Crean o modifican archivos |
-| **Admin** | reindex | Operaciones de mantenimiento |
+| **Admin** | init_project, reindex | Operaciones de setup y mantenimiento |
 
 ---
 
@@ -772,7 +772,79 @@ Registra una nota de sesión con fecha automática.
 
 ---
 
-## Tool Administrativa
+## Tools Administrativas
+
+### `init_project`
+
+Crea un nuevo proyecto con la estructura estándar de carpetas.
+
+**Parameters:**
+
+| Param | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `project` | string | sí | Nombre del proyecto (sin `/`, `\`, `..`) |
+
+**Request:**
+
+```json
+{
+  "project": "my-new-api"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "initialized",
+  "project": "my-new-api",
+  "path": "my-new-api",
+  "absolute_path": "/Users/x/.vibe/my-new-api",
+  "folders": ["tasks", "plans", "sessions", "reports", "changelog", "references", "scratch", "assets"]
+}
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `status` | string | Siempre "initialized" si exitoso |
+| `project` | string | Nombre del proyecto creado |
+| `path` | string | Path relativo a VIBE_ROOT |
+| `absolute_path` | string | Path absoluto |
+| `folders` | array | Lista de carpetas creadas |
+
+**Estructura creada:**
+
+```
+~/.vibe/my-new-api/
+├── tasks/
+├── plans/
+├── sessions/
+├── reports/
+├── changelog/
+├── references/
+├── scratch/
+├── assets/
+└── status.md
+```
+
+**status.md generado:**
+
+```markdown
+# my-new-api
+
+Status: setup
+```
+
+**Errors:**
+
+| Code | Descripción |
+|------|-------------|
+| `PROJECT_EXISTS` | El proyecto ya existe |
+| `INVALID_PROJECT_NAME` | Nombre contiene caracteres inválidos (`/`, `\`, `..`) |
+
+**Filesystem operation:** `mkdir(~/.vibe/{project}/{folder})` × 8 + `write(~/.vibe/{project}/status.md)`
+
+---
 
 ### `reindex`
 
@@ -1005,6 +1077,7 @@ Referencia rápida de qué operación de filesystem ejecuta cada tool:
 | `update_task_status` | write | `read+write(~/.vibe/{project}/tasks/{task}.md)` |
 | `create_plan` | write | `write(~/.vibe/{project}/plans/{file})` |
 | `log_session` | write | `write/append(~/.vibe/{project}/sessions/{date}.md)` |
+| `init_project` | admin | `mkdir(~/.vibe/{project}/{folders})` + `write(status.md)` |
 | `reindex` | admin | `walk(~/.vibe/)` + SQLite sync |
 
 ---

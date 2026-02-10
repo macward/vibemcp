@@ -9,6 +9,7 @@ from vibe_mcp.tools_write import (
     create_doc,
     create_plan,
     create_task,
+    init_project,
     log_session,
     reindex,
     update_doc,
@@ -429,3 +430,67 @@ class TestReindex:
 
         assert result["status"] == "reindexed"
         assert result["document_count"] >= 3  # At least our 3 documents
+
+
+class TestInitProject:
+    """Tests for init_project function."""
+
+    def test_init_project_creates_structure(self, test_vibe_root):
+        """Test that init_project creates the standard folder structure."""
+        result = init_project(project="newproject")
+
+        assert result["status"] == "initialized"
+        assert result["project"] == "newproject"
+        assert result["path"] == "newproject"
+
+        project_path = test_vibe_root / "newproject"
+        assert project_path.is_dir()
+
+        # Check all standard folders are created
+        expected_folders = [
+            "tasks",
+            "plans",
+            "sessions",
+            "reports",
+            "changelog",
+            "references",
+            "scratch",
+            "assets",
+        ]
+        for folder in expected_folders:
+            assert (project_path / folder).is_dir(), f"Folder '{folder}' should exist"
+
+        assert result["folders"] == expected_folders
+
+        # Check status.md was created
+        status_path = project_path / "status.md"
+        assert status_path.exists()
+        content = status_path.read_text()
+        assert "# newproject" in content
+        assert "Status: setup" in content
+
+    def test_init_project_fails_if_exists(self, test_vibe_root):
+        """Test that init_project fails if project already exists."""
+        # Create a project directory first
+        (test_vibe_root / "existing").mkdir()
+
+        with pytest.raises(ValueError, match="already exists"):
+            init_project(project="existing")
+
+    def test_init_project_prevents_traversal(self, test_vibe_root):
+        """Test that directory traversal is prevented."""
+        with pytest.raises(ValueError, match="Invalid project name"):
+            init_project(project="../evil")
+
+        with pytest.raises(ValueError, match="Invalid project name"):
+            init_project(project="foo/bar")
+
+        with pytest.raises(ValueError, match="Invalid project name"):
+            init_project(project="foo\\bar")
+
+    def test_init_project_returns_absolute_path(self, test_vibe_root):
+        """Test that absolute_path is included in result."""
+        result = init_project(project="myproject")
+
+        assert "absolute_path" in result
+        assert result["absolute_path"] == str(test_vibe_root / "myproject")
