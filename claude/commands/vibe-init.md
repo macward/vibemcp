@@ -2,6 +2,12 @@
 
 Inicializa un proyecto vibe vinculando el repo actual con un workspace en el servidor MCP.
 
+## IMPORTANTE
+
+**DEBES usar la tool `mcp__vibeMCP__tool_init_project` para crear el proyecto.**
+
+NO uses `create_plan`, `create_doc`, ni ninguna otra tool. Solo `tool_init_project` crea la estructura completa de carpetas.
+
 ## Proceso
 
 ### 1. Obtener nombre del proyecto
@@ -9,7 +15,10 @@ Inicializa un proyecto vibe vinculando el repo actual con un workspace en el ser
 - Validar que no contenga caracteres especiales (solo letras, números, guiones)
 
 ### 2. Crear estructura en servidor
-- Llamar `mcp__vibeMCP__tool_init_project` con el nombre del proyecto
+```
+OBLIGATORIO: mcp__vibeMCP__tool_init_project(project="<nombre>")
+```
+- Esta tool crea TODAS las carpetas: tasks, plans, sessions, reports, changelog, references, scratch, assets
 - Si el proyecto ya existe, informar y preguntar si continuar (solo vincular)
 
 ### 3. Vincular repo local
@@ -18,12 +27,10 @@ Inicializa un proyecto vibe vinculando el repo actual con un workspace en el ser
 - Si ya tiene `vibe:`, preguntar si reemplazar
 
 ### 4. Confirmar
-- Mostrar resumen:
-  - Proyecto creado/vinculado en servidor
-  - CLAUDE.md actualizado
-  - Próximos pasos (usar MCP tools)
+- Mostrar resumen de lo creado
 
 ## Reglas
-1. No sobrescribir configuración existente sin confirmar
-2. Si MCP no está disponible, informar al usuario
-3. El nombre del proyecto debe ser válido (sin /, \, ..)
+1. **SIEMPRE usar `tool_init_project`** - nunca crear carpetas manualmente ni usar otras tools
+2. No sobrescribir configuración existente sin confirmar
+3. Si MCP no está disponible, informar al usuario
+4. El nombre del proyecto debe ser válido (sin /, \, ..)
