@@ -17,6 +17,7 @@ class Config:
     vibe_db: Path
     auth_token: str | None
     read_only: bool
+    webhooks_enabled: bool
 
     @classmethod
     def from_env(cls, read_only_override: bool | None = None) -> "Config":
@@ -53,12 +54,20 @@ class Config:
         else:
             read_only = os.getenv("VIBE_READ_ONLY", "").lower() in ("1", "true", "yes")
 
+        # Webhooks enabled by default
+        webhooks_enabled = os.getenv("VIBE_WEBHOOKS_ENABLED", "true").lower() not in (
+            "0",
+            "false",
+            "no",
+        )
+
         return cls(
             vibe_root=vibe_root,
             vibe_port=vibe_port,
             vibe_db=vibe_db,
             auth_token=auth_token,
             read_only=read_only,
+            webhooks_enabled=webhooks_enabled,
         )
 
 

@@ -4,6 +4,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from vibe_mcp.auth import check_write_permission
 from vibe_mcp.config import get_config
@@ -11,6 +12,24 @@ from vibe_mcp.indexer import Indexer
 from vibe_mcp.indexer.walker import FileInfo, compute_hash
 
 logger = logging.getLogger(__name__)
+
+
+def _fire_webhook(event_type: str, project: str | None, data: dict[str, Any]) -> None:
+    """Fire a webhook event if webhooks are enabled.
+
+    Args:
+        event_type: Event type (e.g., "task.created")
+        project: Project name (None for global events like reindex)
+        data: Event data
+    """
+    try:
+        from vibe_mcp.webhooks import get_webhook_manager
+
+        manager = get_webhook_manager()
+        manager.fire_event(event_type, project, data)
+    except Exception:
+        # Webhook errors should never break the main operation
+        logger.exception("Failed to fire webhook event %s", event_type)
 
 
 def _get_indexer() -> Indexer:
@@ -203,11 +222,24 @@ def create_doc(project: str, folder: str, filename: str, content: str) -> dict:
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": "created",
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "doc.created",
+        project,
+        {
+            "folder": folder,
+            "filename": file_path.name,
+            "path": result["path"],
+        },
+    )
+
+    return result
 
 
 def update_doc(project: str, path: str, content: str) -> dict:
@@ -254,11 +286,23 @@ def update_doc(project: str, path: str, content: str) -> dict:
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": "updated",
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "doc.updated",
+        project,
+        {
+            "filename": file_path.name,
+            "path": result["path"],
+        },
+    )
+
+    return result
 
 
 def create_task(
@@ -333,13 +377,28 @@ def create_task(
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": "created",
         "task_number": task_num,
         "filename": filename,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "task.created",
+        project,
+        {
+            "task_number": task_num,
+            "title": title,
+            "filename": filename,
+            "path": result["path"],
+            "status": "pending",
+        },
+    )
+
+    return result
 
 
 def update_task_status(project: str, task_file: str, new_status: str) -> dict:
@@ -417,12 +476,25 @@ def update_task_status(project: str, task_file: str, new_status: str) -> dict:
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": "updated",
         "new_status": new_status,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "task.updated",
+        project,
+        {
+            "filename": task_file,
+            "path": result["path"],
+            "new_status": new_status,
+        },
+    )
+
+    return result
 
 
 def create_plan(project: str, content: str) -> dict:
@@ -463,11 +535,24 @@ def create_plan(project: str, content: str) -> dict:
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": action,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    event_type = "plan.created" if action == "created" else "plan.updated"
+    _fire_webhook(
+        event_type,
+        project,
+        {
+            "filename": "execution-plan.md",
+            "path": result["path"],
+        },
+    )
+
+    return result
 
 
 def log_session(project: str, content: str) -> dict:
@@ -520,12 +605,25 @@ def log_session(project: str, content: str) -> dict:
     # Reindex
     _reindex_file(file_path)
 
-    return {
+    result = {
         "status": action,
         "date": today,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "session.logged",
+        project,
+        {
+            "date": today,
+            "path": result["path"],
+            "action": action,
+        },
+    )
+
+    return result
 
 
 def reindex() -> dict:
@@ -540,10 +638,21 @@ def reindex() -> dict:
 
     logger.info("Full reindex complete: %d documents indexed", count)
 
-    return {
+    result = {
         "status": "reindexed",
         "document_count": count,
     }
+
+    # Fire webhook (use None for global/cross-project events)
+    _fire_webhook(
+        "index.reindexed",
+        None,
+        {
+            "document_count": count,
+        },
+    )
+
+    return result
 
 
 def init_project(project: str) -> dict:
@@ -599,13 +708,26 @@ def init_project(project: str) -> dict:
 
     logger.info("Initialized project: %s", project)
 
-    return {
+    result = {
         "status": "initialized",
         "project": project,
         "path": str(project_path.relative_to(config.vibe_root)),
         "absolute_path": str(project_path),
         "folders": folders,
     }
+
+    # Fire webhook
+    _fire_webhook(
+        "project.initialized",
+        project,
+        {
+            "project": project,
+            "path": result["path"],
+            "folders": folders,
+        },
+    )
+
+    return result
 
 
 def register_tools_write(mcp) -> None:

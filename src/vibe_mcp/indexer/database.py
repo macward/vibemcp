@@ -10,11 +10,12 @@ from pathlib import Path
 
 from vibe_mcp.indexer.models import Chunk, Document, Project, SearchResult
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 SCHEMA_SQL = """
--- vibeMCP Index Schema v1.0
+-- vibeMCP Index Schema v1.1
 -- This index is disposable: it regenerates from VIBE_ROOT/
+-- v1.1: Added webhook_subscriptions and webhook_logs tables
 
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
@@ -106,7 +107,41 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT
 );
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1.0');
+-- Webhook subscriptions
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    url         TEXT NOT NULL,
+    secret      TEXT NOT NULL,
+    event_types TEXT NOT NULL,
+    project     TEXT,
+    active      INTEGER NOT NULL DEFAULT 1,
+    description TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_active ON webhook_subscriptions(active);
+CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_project ON webhook_subscriptions(project);
+CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_active_project ON webhook_subscriptions(active, project);
+
+-- Webhook delivery logs
+CREATE TABLE IF NOT EXISTS webhook_logs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id INTEGER NOT NULL,
+    event_type      TEXT NOT NULL,
+    event_id        TEXT NOT NULL,
+    payload         TEXT NOT NULL,
+    status_code     INTEGER,
+    success         INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (subscription_id) REFERENCES webhook_subscriptions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_subscription ON webhook_logs(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_event_id ON webhook_logs(event_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
+
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1.1');
 INSERT OR REPLACE INTO meta (key, value) VALUES ('created_at', datetime('now'));
 """
 
@@ -554,3 +589,224 @@ class Database:
         """Rebuild the FTS5 index."""
         with self._write_cursor() as cursor:
             cursor.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
+
+    # Webhook operations
+
+    def create_webhook_subscription(
+        self,
+        url: str,
+        secret: str,
+        event_types: list[str],
+        project: str | None = None,
+        description: str | None = None,
+    ) -> int:
+        """Create a webhook subscription.
+
+        Args:
+            url: Webhook URL to POST to
+            secret: Secret for HMAC signature
+            event_types: List of event types to subscribe to (e.g., ["task.created", "*"])
+            project: Optional project filter (None = all projects)
+            description: Optional description
+
+        Returns:
+            Subscription ID
+        """
+        event_types_json = json.dumps(event_types)
+        with self._write_cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO webhook_subscriptions
+                (url, secret, event_types, project, description)
+                VALUES (?, ?, ?, ?, ?)""",
+                (url, secret, event_types_json, project, description),
+            )
+            return cursor.lastrowid  # type: ignore
+
+    def delete_webhook_subscription(self, subscription_id: int) -> bool:
+        """Delete a webhook subscription.
+
+        Args:
+            subscription_id: Subscription ID to delete
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with self._write_cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM webhook_subscriptions WHERE id = ?",
+                (subscription_id,),
+            )
+            return cursor.rowcount > 0
+
+    def get_webhook_subscription(self, subscription_id: int) -> dict | None:
+        """Get a webhook subscription by ID.
+
+        Args:
+            subscription_id: Subscription ID
+
+        Returns:
+            Subscription dict or None if not found
+        """
+        with self._read_cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM webhook_subscriptions WHERE id = ?",
+                (subscription_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_webhook_subscription(row)
+            return None
+
+    def list_webhook_subscriptions(
+        self,
+        project: str | None = None,
+        active_only: bool = True,
+    ) -> list[dict]:
+        """List webhook subscriptions.
+
+        Args:
+            project: Optional project filter
+            active_only: If True, only return active subscriptions
+
+        Returns:
+            List of subscription dicts
+        """
+        query = "SELECT * FROM webhook_subscriptions WHERE 1=1"
+        params: list = []
+
+        if active_only:
+            query += " AND active = 1"
+        if project is not None:
+            query += " AND (project = ? OR project IS NULL)"
+            params.append(project)
+
+        query += " ORDER BY created_at DESC"
+
+        with self._read_cursor() as cursor:
+            cursor.execute(query, params)
+            return [self._row_to_webhook_subscription(row) for row in cursor.fetchall()]
+
+    def get_active_subscriptions_for_event(
+        self,
+        event_type: str,
+        project: str,
+    ) -> list[dict]:
+        """Get active subscriptions matching an event.
+
+        Args:
+            event_type: Event type (e.g., "task.created")
+            project: Project name
+
+        Returns:
+            List of matching subscription dicts
+        """
+        with self._read_cursor() as cursor:
+            cursor.execute(
+                """SELECT * FROM webhook_subscriptions
+                WHERE active = 1
+                AND (project = ? OR project IS NULL)
+                ORDER BY created_at""",
+                (project,),
+            )
+            subscriptions = []
+            for row in cursor.fetchall():
+                sub = self._row_to_webhook_subscription(row)
+                event_types = sub["event_types"]
+                if "*" in event_types or event_type in event_types:
+                    subscriptions.append(sub)
+            return subscriptions
+
+    def _row_to_webhook_subscription(self, row: sqlite3.Row) -> dict:
+        """Convert a database row to a webhook subscription dict."""
+        return {
+            "id": row["id"],
+            "url": row["url"],
+            "secret": row["secret"],
+            "event_types": json.loads(row["event_types"]),
+            "project": row["project"],
+            "active": bool(row["active"]),
+            "description": row["description"],
+            "created_at": row["created_at"],
+        }
+
+    def log_webhook_delivery(
+        self,
+        subscription_id: int,
+        event_type: str,
+        event_id: str,
+        payload: str,
+        status_code: int | None,
+        success: bool,
+        error_message: str | None = None,
+    ) -> int:
+        """Log a webhook delivery attempt.
+
+        Args:
+            subscription_id: Subscription ID
+            event_type: Event type
+            event_id: Unique event ID
+            payload: JSON payload sent
+            status_code: HTTP status code (None if failed before sending)
+            success: Whether delivery was successful
+            error_message: Error message if failed
+
+        Returns:
+            Log entry ID
+        """
+        with self._write_cursor() as cursor:
+            cursor.execute(
+                """INSERT INTO webhook_logs
+                (subscription_id, event_type, event_id, payload, status_code, success, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    subscription_id,
+                    event_type,
+                    event_id,
+                    payload,
+                    status_code,
+                    1 if success else 0,
+                    error_message,
+                ),
+            )
+            return cursor.lastrowid  # type: ignore
+
+    def get_webhook_logs(
+        self,
+        subscription_id: int | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Get webhook delivery logs.
+
+        Args:
+            subscription_id: Optional filter by subscription
+            limit: Maximum number of logs to return
+
+        Returns:
+            List of log dicts
+        """
+        query = "SELECT * FROM webhook_logs WHERE 1=1"
+        params: list = []
+
+        if subscription_id is not None:
+            query += " AND subscription_id = ?"
+            params.append(subscription_id)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        with self._read_cursor() as cursor:
+            cursor.execute(query, params)
+            return [
+                {
+                    "id": row["id"],
+                    "subscription_id": row["subscription_id"],
+                    "event_type": row["event_type"],
+                    "event_id": row["event_id"],
+                    "payload": row["payload"],
+                    "status_code": row["status_code"],
+                    "success": bool(row["success"]),
+                    "error_message": row["error_message"],
+                    "created_at": row["created_at"],
+                }
+                for row in cursor.fetchall()
+            ]
