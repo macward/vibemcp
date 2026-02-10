@@ -550,7 +550,7 @@ def init_project(project: str) -> dict:
     """
     Initialize a new project with standard directory structure.
 
-    Creates ~/.vibe/<project>/ with folders:
+    Creates <VIBE_ROOT>/<project>/ with folders:
     tasks, plans, sessions, reports, changelog, references, scratch, assets
 
     Args:
@@ -690,7 +690,7 @@ def register_tools_write(mcp) -> None:
     def tool_init_project(project: str) -> dict:
         """Initialize a new project with standard directory structure.
 
-        Creates ~/.vibe/<project>/ with folders:
+        Creates <VIBE_ROOT>/<project>/ with folders:
         tasks, plans, sessions, reports, changelog, references, scratch, assets
 
         Args:

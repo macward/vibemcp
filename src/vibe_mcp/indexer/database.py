@@ -14,7 +14,7 @@ SCHEMA_VERSION = "1.0"
 
 SCHEMA_SQL = """
 -- vibeMCP Index Schema v1.0
--- This index is disposable: it regenerates from ~/.vibe/
+-- This index is disposable: it regenerates from VIBE_ROOT/
 
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;

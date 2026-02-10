@@ -29,7 +29,7 @@ def walk_vibe_root(vibe_root: Path) -> Iterator[FileInfo]:
     Walk the VIBE_ROOT directory and yield FileInfo for each .md file.
 
     Structure expected:
-    ~/.vibe/
+    <VIBE_ROOT>/
     ├── project1/
     │   ├── status.md
     │   ├── tasks/
