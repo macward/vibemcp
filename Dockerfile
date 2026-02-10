@@ -30,17 +30,12 @@ COPY --from=builder /dist/*.whl /tmp/
 RUN uv pip install --system /tmp/*.whl && \
     rm /tmp/*.whl
 
-# Create non-root user
-RUN useradd -r -m -s /bin/bash vibemcp
+# Create data directory (permissions handled by docker-compose user mapping)
+RUN mkdir -p /data
 
-# Create data directory
-RUN mkdir -p /data && chown vibemcp:vibemcp /data
-
-# Switch to non-root user
-USER vibemcp
-
-# Environment defaults
-ENV VIBE_ROOT=/data \
+# Environment defaults (PATH ensures scripts are found with any user)
+ENV PATH="/usr/local/bin:$PATH" \
+    VIBE_ROOT=/data \
     VIBE_DB=/data/index.db \
     VIBE_PORT=8288
 
@@ -51,5 +46,5 @@ EXPOSE 8288
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8288/')" || exit 1
 
-# Run server
-CMD ["vibe-mcp"]
+# Run server (use python -m for robust execution with any user)
+CMD ["python", "-m", "vibe_mcp.main"]

@@ -124,8 +124,8 @@ def main() -> None:
     # Create and run server
     try:
         mcp = create_server()
-        logger.info("Starting MCP server...")
-        mcp.run()
+        logger.info("Starting MCP server on port %s...", config.vibe_port)
+        mcp.run(transport="sse", host="0.0.0.0", port=config.vibe_port)
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
         sys.exit(0)
