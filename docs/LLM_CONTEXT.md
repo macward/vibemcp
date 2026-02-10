@@ -124,3 +124,78 @@ content:api            → Search in content only
 |--------|---------|
 | `project_briefing` | Full project context (tasks, plans, recent sessions) |
 | `session_start` | Quick briefing to resume work |
+
+---
+
+## Skills / Commands
+
+Slash commands available in Claude Code for working with vibeMCP:
+
+| Command | Purpose |
+|---------|---------|
+| `/vibe-init` | Initialize a project workspace - creates folder structure and links repo |
+| `/task-breakdown` | Analyze a feature request and create actionable tasks with execution plan |
+| `/solve-task` | Execute a task: create branch, implement, code review, push, PR, merge |
+| `/design` | Generate a design document from research/specs |
+| `/session-start` | Resume context quickly at session start - shows active tasks and last session |
+| `/status` | Project overview - task counts by status and execution plan progress |
+| `/next-task` | Select and start the next available pending task |
+
+### /vibe-init
+
+Initializes a new vibe workspace for the current project:
+1. Asks for project name
+2. Creates workspace structure via `tool_init_project`
+3. Links repo by adding `vibe: <name>` to CLAUDE.md
+
+### /task-breakdown
+
+Analyzes a feature/request and creates tasks:
+1. Reads project from CLAUDE.md (`vibe: <name>`)
+2. Checks existing tasks via `list_tasks`
+3. Creates tasks via `create_task`
+4. Creates execution plan via `create_doc`
+
+### /solve-task
+
+Executes a task file end-to-end:
+1. Reads task file (e.g., `tasks/001-auth.md`)
+2. Creates git branch (`task/001-auth`)
+3. Implements the task following steps
+4. Runs code review via `code-review-expert` agent
+5. Creates changelog entry
+6. Pushes branch, creates PR, merges (via `gh` CLI)
+
+### /design
+
+Generates a design document from research:
+1. Reads research/specs files provided
+2. Analyzes project context (CLAUDE.md, structure)
+3. Asks clarifying questions if needed
+4. Creates `docs/design/YYYY-MM-DD-<topic>-design.md`
+
+### /session-start
+
+Resumes context quickly at the start of a session:
+1. Reads `vibe: <project>` from CLAUDE.md
+2. Lists in-progress tasks via `list_tasks`
+3. Reads the most recent session log
+4. Shows summary with active tasks, last work, and suggested next step
+
+### /status
+
+Provides a project overview:
+1. Lists all tasks grouped by status (done, in-progress, pending, blocked)
+2. Shows execution plan graph if available
+3. Displays progress summary
+
+### /next-task
+
+Selects and starts the next pending task:
+1. Lists pending tasks via `list_tasks`
+2. Checks execution plan for dependencies
+3. Selects first unblocked task
+4. Marks as in-progress via `update_task_status`
+5. Suggests running `/solve-task` to execute
+
+Use `/vibe-init` first to setup, then `/task-breakdown` to plan work.

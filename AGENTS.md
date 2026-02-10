@@ -58,6 +58,16 @@ MCP server que expone el sistema de workspaces `.vibe` existente para que cualqu
 3. Un solo endpoint — todos los clientes, misma fuente
 4. Scope acotado — context server, no task manager 2.0
 
+## Commands
+
+- `/vibe-init` — Initialize project workspace
+- `/task-breakdown` — Create tasks from feature request
+- `/solve-task` — Execute task: branch → implement → review → PR → merge
+- `/design` — Generate design document from research
+- `/session-start` — Resume context: show active tasks and last session
+- `/status` — Project overview: tasks by status and plan progress
+- `/next-task` — Select and start next pending task
+
 ## Referencias
 
 Ver `/references/` para documentación completa:
