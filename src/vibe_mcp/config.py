@@ -4,6 +4,7 @@ Loads configuration from environment variables with sensible defaults.
 """
 
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,23 +72,37 @@ class Config:
         )
 
 
-# Global config instance (lazy loaded)
+# =============================================================================
+# DEPRECATED: Global singleton pattern - will be removed after DI migration
+# =============================================================================
 _config: Config | None = None
 _read_only_override: bool | None = None
 
 
 def set_read_only_override(read_only: bool | None) -> None:
-    """Set the read-only override from CLI.
+    """DEPRECATED: Set the read-only override from CLI.
 
-    Args:
-        read_only: If True, forces read-only mode. If None, uses env var.
+    Use Config.from_env(read_only_override=...) instead.
     """
+    warnings.warn(
+        "set_read_only_override() is deprecated. Use Config.from_env(read_only_override=...) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _read_only_override
     _read_only_override = read_only
 
 
 def get_config() -> Config:
-    """Get the global configuration instance."""
+    """DEPRECATED: Get the global configuration instance.
+
+    Use Config.from_env() instead and pass config as a parameter.
+    """
+    warnings.warn(
+        "get_config() is deprecated. Use Config.from_env() and dependency injection instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _config
     if _config is None:
         _config = Config.from_env(read_only_override=_read_only_override)
@@ -95,7 +110,15 @@ def get_config() -> Config:
 
 
 def reset_config() -> None:
-    """Reset the global configuration (useful for testing)."""
+    """DEPRECATED: Reset the global configuration (for testing).
+
+    Create fresh Config instances directly instead.
+    """
+    warnings.warn(
+        "reset_config() is deprecated. Create fresh Config instances instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _config, _read_only_override
     _config = None
     _read_only_override = None

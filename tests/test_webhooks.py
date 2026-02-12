@@ -4,10 +4,12 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from vibe_mcp.config import Config
 from vibe_mcp.indexer import Database
 from vibe_mcp.webhooks import (
     EVENT_TYPES,
@@ -29,9 +31,24 @@ def test_db(tmp_path):
 
 
 @pytest.fixture
-def webhook_manager(test_db):
-    """Create a webhook manager with test database."""
-    return WebhookManager(test_db)
+def test_config(tmp_path):
+    """Create a test config with webhooks enabled."""
+    vibe_root = tmp_path / ".vibe"
+    vibe_root.mkdir(exist_ok=True)
+    return Config(
+        vibe_root=vibe_root,
+        vibe_db=tmp_path / "test.db",
+        vibe_port=8765,
+        auth_token=None,
+        read_only=False,
+        webhooks_enabled=True,
+    )
+
+
+@pytest.fixture
+def webhook_manager(test_db, test_config):
+    """Create a webhook manager with test database and config."""
+    return WebhookManager(test_db, test_config)
 
 
 @pytest.fixture

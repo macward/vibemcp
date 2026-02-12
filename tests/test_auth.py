@@ -8,7 +8,7 @@ from vibe_mcp.auth import (
     check_write_permission,
     get_auth_provider,
 )
-from vibe_mcp.config import reset_config, set_read_only_override
+from vibe_mcp.config import Config, reset_config, set_read_only_override
 
 
 @pytest.fixture(autouse=True)
@@ -26,9 +26,9 @@ class TestBearerTokenVerifier:
     async def test_no_auth_configured_allows_any_request(self, monkeypatch):
         """When VIBE_AUTH_TOKEN is not set, all requests should pass."""
         monkeypatch.delenv("VIBE_AUTH_TOKEN", raising=False)
-        reset_config()
+        config = Config.from_env()
 
-        verifier = BearerTokenVerifier()
+        verifier = BearerTokenVerifier(config)
 
         # Should return valid AccessToken for any token
         result = await verifier.verify_token("any-token")
@@ -42,9 +42,9 @@ class TestBearerTokenVerifier:
     async def test_empty_token_rejected(self, monkeypatch):
         """When auth is configured, empty token should be rejected."""
         monkeypatch.setenv("VIBE_AUTH_TOKEN", "a" * 32)
-        reset_config()
+        config = Config.from_env()
 
-        verifier = BearerTokenVerifier()
+        verifier = BearerTokenVerifier(config)
         result = await verifier.verify_token("")
         assert result is None
 
@@ -52,9 +52,9 @@ class TestBearerTokenVerifier:
     async def test_invalid_token_rejected(self, monkeypatch):
         """When auth is configured, wrong token should be rejected."""
         monkeypatch.setenv("VIBE_AUTH_TOKEN", "correct-token-with-32-characters!")
-        reset_config()
+        config = Config.from_env()
 
-        verifier = BearerTokenVerifier()
+        verifier = BearerTokenVerifier(config)
         result = await verifier.verify_token("wrong-token")
         assert result is None
 
@@ -63,9 +63,9 @@ class TestBearerTokenVerifier:
         """When auth is configured, correct token should be accepted."""
         token = "my-super-secret-token-32-chars!!"
         monkeypatch.setenv("VIBE_AUTH_TOKEN", token)
-        reset_config()
+        config = Config.from_env()
 
-        verifier = BearerTokenVerifier()
+        verifier = BearerTokenVerifier(config)
         result = await verifier.verify_token(token)
         assert result is not None
         assert result.client_id == "authenticated"
