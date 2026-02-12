@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe_mcp.config import get_config, reset_config
+from vibe_mcp.config import Config
 from vibe_mcp.indexer.database import Database
 from vibe_mcp.indexer.indexer import Indexer
 
@@ -15,6 +15,7 @@ def indexed_project(monkeypatch):
     """Create a temporary vibe root with an indexed demo-api project."""
     with tempfile.TemporaryDirectory() as tmpdir:
         vibe_path = Path(tmpdir)
+        db_path = vibe_path / "index.db"
 
         # Create demo-api project structure
         project_path = vibe_path / "demo-api"
@@ -137,23 +138,17 @@ Backend API for authentication system.
 """
         )
 
-        # Set environment variables
+        # Set environment variables for Config.from_env() in tests
         monkeypatch.setenv("VIBE_ROOT", str(vibe_path))
-        monkeypatch.setenv("VIBE_DB", str(vibe_path / "index.db"))
-
-        # Reset config to pick up new env vars
-        reset_config()
+        monkeypatch.setenv("VIBE_DB", str(db_path))
 
         # Initialize database and index the project
-        config = get_config()
-        indexer = Indexer(config.vibe_root, config.vibe_db)
+        indexer = Indexer(vibe_path, db_path)
         indexer.initialize()
         indexer.reindex()
         indexer.close()
 
         yield vibe_path
-
-        reset_config()
 
 
 @pytest.fixture
@@ -161,6 +156,7 @@ def empty_project(monkeypatch):
     """Create a temporary vibe root with an empty project."""
     with tempfile.TemporaryDirectory() as tmpdir:
         vibe_path = Path(tmpdir)
+        db_path = vibe_path / "index.db"
 
         # Create empty project structure
         project_path = vibe_path / "empty-project"
@@ -182,23 +178,17 @@ Placeholder task for empty project.
 """
         )
 
-        # Set environment variables
+        # Set environment variables for Config.from_env() in tests
         monkeypatch.setenv("VIBE_ROOT", str(vibe_path))
-        monkeypatch.setenv("VIBE_DB", str(vibe_path / "index.db"))
-
-        # Reset config
-        reset_config()
+        monkeypatch.setenv("VIBE_DB", str(db_path))
 
         # Initialize database and index
-        config = get_config()
-        indexer = Indexer(config.vibe_root, config.vibe_db)
+        indexer = Indexer(vibe_path, db_path)
         indexer.initialize()
         indexer.reindex()
         indexer.close()
 
         yield vibe_path
-
-        reset_config()
 
 
 class TestProjectBriefing:
@@ -212,7 +202,7 @@ class TestProjectBriefing:
         register_prompts(mcp)
 
         # Get the prompt function
-        config = get_config()
+        config = Config.from_env()
         db = Database(config.vibe_db)
 
         # Manually call the function logic (since we can't easily invoke prompts)
@@ -230,7 +220,7 @@ class TestProjectBriefing:
         mcp = FastMCP("test")
         register_prompts(mcp)
 
-        config = get_config()
+        config = Config.from_env()
         db = Database(config.vibe_db)
 
         # Verify project exists and has data
@@ -265,7 +255,7 @@ class TestProjectBriefing:
         mcp = FastMCP("test")
         register_prompts(mcp)
 
-        config = get_config()
+        config = Config.from_env()
         db = Database(config.vibe_db)
 
         # Verify project exists
@@ -292,7 +282,7 @@ class TestSessionStart:
         mcp = FastMCP("test")
         register_prompts(mcp)
 
-        config = get_config()
+        config = Config.from_env()
         db = Database(config.vibe_db)
 
         # Verify project exists
@@ -325,7 +315,7 @@ class TestSessionStart:
         mcp = FastMCP("test")
         register_prompts(mcp)
 
-        config = get_config()
+        config = Config.from_env()
         db = Database(config.vibe_db)
 
         # Verify project exists but has no content

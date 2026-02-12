@@ -4,10 +4,13 @@ import hashlib
 import hmac
 import json
 import time
+import warnings
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from vibe_mcp.config import Config, reset_config
 from vibe_mcp.indexer import Database
 from vibe_mcp.webhooks import (
     EVENT_TYPES,
@@ -29,9 +32,35 @@ def test_db(tmp_path):
 
 
 @pytest.fixture
-def webhook_manager(test_db):
-    """Create a webhook manager with test database."""
-    return WebhookManager(test_db)
+def test_config(tmp_path):
+    """Create a test config with webhooks enabled."""
+    vibe_root = tmp_path / ".vibe"
+    vibe_root.mkdir(exist_ok=True)
+    return Config(
+        vibe_root=vibe_root,
+        vibe_db=tmp_path / "test.db",
+        vibe_port=8765,
+        auth_token=None,
+        read_only=False,
+        webhooks_enabled=True,
+    )
+
+
+@pytest.fixture
+def webhook_manager(test_db, test_config):
+    """Create a webhook manager with test database and config."""
+    return WebhookManager(test_db, test_config)
+
+
+def _reset_singletons_silent():
+    """Reset config and webhook manager singletons without triggering deprecation warnings.
+
+    This is needed for tests that rely on the singleton pattern still used in some modules.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        reset_config()
+        reset_webhook_manager()
 
 
 @pytest.fixture
@@ -45,17 +74,13 @@ def test_vibe_env(tmp_path, monkeypatch):
     monkeypatch.setenv("VIBE_DB", str(db_path))
     monkeypatch.setenv("VIBE_WEBHOOKS_ENABLED", "true")
 
-    # Reset global state
-    from vibe_mcp.config import reset_config
-
-    reset_config()
-    reset_webhook_manager()
+    # Reset global state (needed for integration tests with tools_write)
+    _reset_singletons_silent()
 
     yield vibe_root
 
     # Cleanup
-    reset_config()
-    reset_webhook_manager()
+    _reset_singletons_silent()
 
 
 class TestWebhookRegistration:
@@ -380,14 +405,24 @@ class TestWebhookIntegration:
 
     def test_create_task_fires_webhook(self, test_vibe_env):
         """Test that creating a task fires a webhook."""
-        from vibe_mcp.tools_write import create_task
+        from fastmcp import FastMCP
+
+        from vibe_mcp.indexer import Indexer
+        from vibe_mcp.tools_write import register_tools_write
 
         # Create test project
         test_project = test_vibe_env / "test_project"
         test_project.mkdir()
 
+        # Create fresh config, indexer, and webhook manager
+        config = Config.from_env()
+        db = Database(config.vibe_db)
+        db.initialize()
+        indexer = Indexer(config.vibe_root, config.vibe_db)
+        indexer.initialize()
+        manager = WebhookManager(db, config)
+
         # Register webhook
-        manager = get_webhook_manager()
         manager.register(
             url="https://example.com/webhook",
             secret="a" * 32,
@@ -409,6 +444,17 @@ class TestWebhookIntegration:
 
         manager._deliver_sync = mock_deliver
 
+        # Register tools with the webhook manager
+        mcp = FastMCP()
+        register_tools_write(mcp, config, indexer, webhook_mgr=manager)
+
+        # Get create_task tool
+        create_task = None
+        for tool in mcp._tool_manager._tools.values():
+            if tool.fn.__name__ == "tool_create_task":
+                create_task = tool.fn
+                break
+
         try:
             # Create task
             create_task(
@@ -428,53 +474,48 @@ class TestWebhookIntegration:
             assert call["payload"]["data"]["title"] == "Test Task"
         finally:
             manager._deliver_sync = original_deliver
+            manager.shutdown(timeout=1.0)
+            indexer.close()
+            db.close()
 
     def test_webhooks_disabled(self, test_vibe_env, monkeypatch):
-        """Test that webhooks are not fired when disabled."""
-        from vibe_mcp.config import reset_config
-        from vibe_mcp.tools_write import create_task
+        """Test that webhooks are not fired when no webhook manager is provided."""
+        from fastmcp import FastMCP
 
-        # Disable webhooks
-        monkeypatch.setenv("VIBE_WEBHOOKS_ENABLED", "false")
-        reset_config()
-        reset_webhook_manager()
+        from vibe_mcp.indexer import Indexer
+        from vibe_mcp.tools_write import register_tools_write
 
         # Create test project
         test_project = test_vibe_env / "test_project"
         test_project.mkdir()
 
-        # Register webhook
-        manager = get_webhook_manager()
-        manager.register(
-            url="https://example.com/webhook",
-            secret="a" * 32,
-            event_types=["task.created"],
-            project="test_project",
-        )
+        # Create fresh config and indexer, but no webhook manager
+        config = Config.from_env()
+        indexer = Indexer(config.vibe_root, config.vibe_db)
+        indexer.initialize()
 
-        # Mock the _deliver_sync method to capture calls
-        delivery_calls = []
+        # Register tools without webhook manager
+        mcp = FastMCP()
+        register_tools_write(mcp, config, indexer, webhook_mgr=None)
 
-        def mock_deliver(event_id, event_type, payload, subscription):
-            delivery_calls.append({
-                "event_id": event_id,
-                "event_type": event_type,
-            })
+        # Get create_task tool
+        create_task = None
+        for tool in mcp._tool_manager._tools.values():
+            if tool.fn.__name__ == "tool_create_task":
+                create_task = tool.fn
+                break
 
-        manager._deliver_sync = mock_deliver
+        try:
+            # Create task - should not raise even without webhook manager
+            result = create_task(
+                project="test_project",
+                title="Test Task",
+                objective="Test objective",
+            )
 
-        # Create task
-        create_task(
-            project="test_project",
-            title="Test Task",
-            objective="Test objective",
-        )
-
-        # Wait for background thread (if any)
-        time.sleep(0.5)
-
-        # Verify webhook was NOT called
-        assert len(delivery_calls) == 0
+            assert result["status"] == "created"
+        finally:
+            indexer.close()
 
 
 class TestSSRFProtection:

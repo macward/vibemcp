@@ -1,83 +1,31 @@
 """Webhook MCP tools for vibeMCP - register, unregister, and list webhooks."""
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from vibe_mcp.auth import check_write_permission
-from vibe_mcp.webhooks import get_webhook_manager
+from vibe_mcp.config import Config
+from vibe_mcp.webhooks import WebhookManager
+
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
 
-def register_webhook(
-    url: str,
-    secret: str,
-    event_types: list[str],
-    project: str | None = None,
-    description: str | None = None,
-) -> dict:
-    """Register a new webhook subscription.
-
-    Args:
-        url: URL to POST to when events occur
-        secret: Secret for HMAC-SHA256 signature (min 32 chars)
-        event_types: List of event types to subscribe to
-        project: Optional project filter (None = all projects)
-        description: Optional description
-
-    Returns:
-        Dict with subscription info
-
-    Raises:
-        ValueError: If URL or secret is invalid, or event types are invalid
-        AuthError: If server is in read-only mode
-    """
-    check_write_permission()
-    manager = get_webhook_manager()
-    return manager.register(
-        url=url,
-        secret=secret,
-        event_types=event_types,
-        project=project,
-        description=description,
-    )
-
-
-def unregister_webhook(subscription_id: int) -> dict:
-    """Unregister a webhook subscription.
-
-    Args:
-        subscription_id: ID of the subscription to remove
-
-    Returns:
-        Dict with status
-
-    Raises:
-        ValueError: If subscription not found
-        AuthError: If server is in read-only mode
-    """
-    check_write_permission()
-    manager = get_webhook_manager()
-    return manager.unregister(subscription_id)
-
-
-def list_webhooks(project: str | None = None) -> list[dict]:
-    """List webhook subscriptions.
-
-    Args:
-        project: Optional project filter
-
-    Returns:
-        List of subscription dicts (without secrets)
-    """
-    manager = get_webhook_manager()
-    return manager.list_subscriptions(project=project)
-
-
-def register_tools_webhooks(mcp) -> None:
+def register_tools_webhooks(
+    mcp: "FastMCP",
+    webhook_mgr: WebhookManager | None,
+    config: Config,
+) -> None:
     """Register webhook tools with the FastMCP server.
 
     Args:
         mcp: FastMCP server instance
+        webhook_mgr: WebhookManager instance (None if webhooks disabled)
+        config: Config instance for permission checks
     """
 
     @mcp.tool()
@@ -112,7 +60,11 @@ def register_tools_webhooks(mcp) -> None:
         Returns:
             Dict with subscription_id and other info
         """
-        return register_webhook(
+        if webhook_mgr is None:
+            raise ValueError("Webhooks are disabled on this server")
+
+        check_write_permission(config)
+        return webhook_mgr.register(
             url=url,
             secret=secret,
             event_types=event_types,
@@ -130,7 +82,11 @@ def register_tools_webhooks(mcp) -> None:
         Returns:
             Dict with status
         """
-        return unregister_webhook(subscription_id)
+        if webhook_mgr is None:
+            raise ValueError("Webhooks are disabled on this server")
+
+        check_write_permission(config)
+        return webhook_mgr.unregister(subscription_id)
 
     @mcp.tool()
     def tool_list_webhooks(project: str | None = None) -> list[dict]:
@@ -143,4 +99,7 @@ def register_tools_webhooks(mcp) -> None:
         Returns:
             List of subscription dicts (secrets are not included)
         """
-        return list_webhooks(project=project)
+        if webhook_mgr is None:
+            return []  # No webhooks when disabled
+
+        return webhook_mgr.list_subscriptions(project=project)

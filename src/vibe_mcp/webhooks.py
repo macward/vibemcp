@@ -15,7 +15,9 @@ from urllib.parse import urlparse
 
 import httpx
 
-from vibe_mcp.config import get_config
+import warnings
+
+from vibe_mcp.config import Config, get_config
 from vibe_mcp.indexer import Database
 
 logger = logging.getLogger(__name__)
@@ -128,13 +130,15 @@ class WebhookManager:
     }
     """
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, config: Config):
         """Initialize the webhook manager.
 
         Args:
             db: Database instance for subscription storage
+            config: Config instance for checking webhooks_enabled
         """
         self.db = db
+        self._config = config
         self._executor = ThreadPoolExecutor(
             max_workers=MAX_CONCURRENT_DELIVERIES,
             thread_name_prefix="webhook-delivery",
@@ -293,10 +297,8 @@ class WebhookManager:
             project: Project name (None for global events)
             data: Event data
         """
-        config = get_config()
-
         # Check if webhooks are enabled
-        if not getattr(config, "webhooks_enabled", True):
+        if not self._config.webhooks_enabled:
             logger.debug("Webhooks disabled, skipping event %s", event_type)
             return
 
@@ -450,16 +452,24 @@ class WebhookManager:
         ).hexdigest()
 
 
-# Global webhook manager instance with thread-safe initialization
+# =============================================================================
+# DEPRECATED: Global singleton pattern - will be removed after DI migration
+# =============================================================================
 _webhook_manager: WebhookManager | None = None
 _webhook_manager_lock = threading.Lock()
 
 
 def get_webhook_manager() -> WebhookManager:
-    """Get or create the global webhook manager instance.
+    """DEPRECATED: Get or create the global webhook manager instance.
 
-    Uses double-check locking pattern for thread-safe singleton.
+    Use WebhookManager(db, config) with dependency injection instead.
     """
+    warnings.warn(
+        "get_webhook_manager() is deprecated. Use WebhookManager(db, config) "
+        "and dependency injection instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _webhook_manager
     if _webhook_manager is None:
         with _webhook_manager_lock:
@@ -468,12 +478,20 @@ def get_webhook_manager() -> WebhookManager:
                 config = get_config()
                 db = Database(config.vibe_db)
                 db.initialize()
-                _webhook_manager = WebhookManager(db)
+                _webhook_manager = WebhookManager(db, config)
     return _webhook_manager
 
 
 def reset_webhook_manager() -> None:
-    """Reset the global webhook manager (useful for testing)."""
+    """DEPRECATED: Reset the global webhook manager (for testing).
+
+    Create fresh WebhookManager instances directly instead.
+    """
+    warnings.warn(
+        "reset_webhook_manager() is deprecated. Create fresh WebhookManager instances instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _webhook_manager
     with _webhook_manager_lock:
         if _webhook_manager is not None:

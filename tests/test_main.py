@@ -2,6 +2,7 @@
 
 import logging
 
+from vibe_mcp.config import Config
 from vibe_mcp.main import create_server
 
 
@@ -22,14 +23,12 @@ def test_create_server(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("VIBE_ROOT", str(vibe_root))
     monkeypatch.setenv("VIBE_DB", str(tmp_path / "test.db"))
 
-    # Reset config to pick up new env vars
-    from vibe_mcp.config import reset_config
-
-    reset_config()
+    # Create config from environment
+    config = Config.from_env()
 
     # Capture logs
     with caplog.at_level(logging.INFO):
-        mcp = create_server()
+        mcp = create_server(config)
 
     # Verify server was created
     assert mcp is not None
@@ -62,14 +61,12 @@ def test_create_server_reindexes_empty_db(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv("VIBE_ROOT", str(vibe_root))
     monkeypatch.setenv("VIBE_DB", str(tmp_path / "fresh.db"))
 
-    # Reset config to pick up new env vars
-    from vibe_mcp.config import reset_config
-
-    reset_config()
+    # Create config from environment
+    config = Config.from_env()
 
     # Capture logs
     with caplog.at_level(logging.INFO):
-        mcp = create_server()
+        mcp = create_server(config)
 
     # Verify initial index was performed
     log_messages = [record.message for record in caplog.records]
