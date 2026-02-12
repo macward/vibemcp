@@ -1,12 +1,30 @@
 """Tests for sync module."""
 
-import threading
 import time
 from unittest.mock import MagicMock
 
 import pytest
 
 from vibe_mcp.sync import SyncManager
+
+
+def wait_for_condition(condition_fn, timeout: float = 3.0, interval: float = 0.1) -> bool:
+    """Wait for a condition to become true, polling at interval.
+
+    Args:
+        condition_fn: Callable that returns True when condition is met.
+        timeout: Maximum time to wait in seconds.
+        interval: Time between checks in seconds.
+
+    Returns:
+        True if condition was met, False if timeout was reached.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if condition_fn():
+            return True
+        time.sleep(interval)
+    return False
 
 
 class TestSyncManager:
@@ -82,11 +100,16 @@ class TestSyncManager:
         manager = SyncManager(indexer, 1)
 
         manager.start()
-        # Wait for at least one sync cycle
-        time.sleep(1.5)
-        manager.stop()
-
-        assert indexer.sync.call_count >= 1
+        try:
+            # Poll until sync is called at least once
+            condition_met = wait_for_condition(
+                lambda: indexer.sync.call_count >= 1,
+                timeout=3.0,
+            )
+            assert condition_met, "sync() was not called within timeout"
+            assert indexer.sync.call_count >= 1
+        finally:
+            manager.stop()
 
     def test_sync_exception_doesnt_stop_thread(self):
         """Test exceptions in sync() don't stop the thread."""
@@ -104,9 +127,13 @@ class TestSyncManager:
         manager = SyncManager(indexer, 1)
 
         manager.start()
-        # Wait for multiple sync cycles
-        time.sleep(2.5)
-        manager.stop()
-
-        # Should have continued after the exception
-        assert call_count >= 2
+        try:
+            # Poll until sync is called at least twice (after exception recovery)
+            condition_met = wait_for_condition(
+                lambda: call_count >= 2,
+                timeout=5.0,
+            )
+            assert condition_met, "sync() was not called twice within timeout"
+            assert call_count >= 2
+        finally:
+            manager.stop()

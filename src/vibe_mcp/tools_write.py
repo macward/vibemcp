@@ -129,8 +129,8 @@ def _reindex_file(file_path: Path, config: Config, indexer: Indexer) -> None:
         content_hash=content_hash,
     )
 
-    # Index the file
-    indexer._index_file(file_info)
+    # Index the file (thread-safe)
+    indexer.index_file(file_info)
     logger.info("Reindexed file: %s", relative_path)
 
 

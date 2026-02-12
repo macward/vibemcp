@@ -1,6 +1,7 @@
 """Main entry point for vibemcp MCP server."""
 
 import argparse
+import atexit
 import logging
 import sys
 
@@ -59,6 +60,7 @@ def create_server(config: Config) -> FastMCP:
     if config.sync_interval > 0:
         sync_manager = SyncManager(indexer, config.sync_interval)
         sync_manager.start()
+        atexit.register(sync_manager.stop)
     else:
         logger.info("Auto-sync disabled (VIBE_SYNC_INTERVAL=0)")
 
