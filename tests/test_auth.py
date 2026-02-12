@@ -8,15 +8,7 @@ from vibe_mcp.auth import (
     check_write_permission,
     get_auth_provider,
 )
-from vibe_mcp.config import Config, reset_config, set_read_only_override
-
-
-@pytest.fixture(autouse=True)
-def _clean_config():
-    """Reset config before and after each test."""
-    reset_config()
-    yield
-    reset_config()
+from vibe_mcp.config import Config
 
 
 class TestBearerTokenVerifier:
@@ -78,18 +70,18 @@ class TestGetAuthProvider:
     def test_returns_verifier_when_token_configured(self, monkeypatch):
         """When VIBE_AUTH_TOKEN is set, should return BearerTokenVerifier."""
         monkeypatch.setenv("VIBE_AUTH_TOKEN", "a" * 32)
-        reset_config()
+        config = Config.from_env()
 
-        provider = get_auth_provider()
+        provider = get_auth_provider(config)
         assert provider is not None
         assert isinstance(provider, BearerTokenVerifier)
 
     def test_returns_none_when_no_token(self, monkeypatch):
         """When VIBE_AUTH_TOKEN is not set, should return None."""
         monkeypatch.delenv("VIBE_AUTH_TOKEN", raising=False)
-        reset_config()
+        config = Config.from_env()
 
-        provider = get_auth_provider()
+        provider = get_auth_provider(config)
         assert provider is None
 
 
@@ -99,46 +91,44 @@ class TestCheckWritePermission:
     def test_write_allowed_by_default(self, monkeypatch):
         """By default, write operations should be allowed."""
         monkeypatch.delenv("VIBE_READ_ONLY", raising=False)
-        reset_config()
+        config = Config.from_env()
 
         # Should not raise
-        check_write_permission()
+        check_write_permission(config)
 
     def test_write_rejected_in_read_only_mode_env(self, monkeypatch):
         """When VIBE_READ_ONLY is set, write should be rejected."""
         monkeypatch.setenv("VIBE_READ_ONLY", "true")
-        reset_config()
+        config = Config.from_env()
 
         with pytest.raises(AuthError, match="read-only mode"):
-            check_write_permission()
+            check_write_permission(config)
 
     def test_write_rejected_in_read_only_mode_cli(self, monkeypatch):
         """When CLI read-only flag is set, write should be rejected."""
         monkeypatch.delenv("VIBE_READ_ONLY", raising=False)
-        # Reset first, then set override before get_config is called
-        reset_config()
-        set_read_only_override(True)
+        config = Config.from_env(read_only_override=True)
 
         with pytest.raises(AuthError, match="read-only mode"):
-            check_write_permission()
+            check_write_permission(config)
 
     def test_read_only_env_values(self, monkeypatch):
         """Test various truthy values for VIBE_READ_ONLY."""
         for value in ("1", "true", "TRUE", "yes", "YES", "True"):
             monkeypatch.setenv("VIBE_READ_ONLY", value)
-            reset_config()
+            config = Config.from_env()
 
             with pytest.raises(AuthError, match="read-only mode"):
-                check_write_permission()
+                check_write_permission(config)
 
     def test_read_only_false_values(self, monkeypatch):
         """Test that other values don't enable read-only mode."""
         for value in ("0", "false", "no", ""):
             monkeypatch.setenv("VIBE_READ_ONLY", value)
-            reset_config()
+            config = Config.from_env()
 
             # Should not raise
-            check_write_permission()
+            check_write_permission(config)
 
 
 class TestConfigAuthToken:
@@ -147,9 +137,6 @@ class TestConfigAuthToken:
     def test_token_too_short_rejected(self, monkeypatch):
         """Token shorter than 32 characters should be rejected."""
         monkeypatch.setenv("VIBE_AUTH_TOKEN", "short")
-        reset_config()
-
-        from vibe_mcp.config import Config
 
         with pytest.raises(ValueError, match="at least 32 characters"):
             Config.from_env()
@@ -158,9 +145,6 @@ class TestConfigAuthToken:
         """Token with exactly 32 characters should be accepted."""
         token = "a" * 32
         monkeypatch.setenv("VIBE_AUTH_TOKEN", token)
-        reset_config()
-
-        from vibe_mcp.config import Config
 
         config = Config.from_env()
         assert config.auth_token == token
@@ -169,9 +153,6 @@ class TestConfigAuthToken:
         """Token longer than 32 characters should be accepted."""
         token = "a" * 64
         monkeypatch.setenv("VIBE_AUTH_TOKEN", token)
-        reset_config()
-
-        from vibe_mcp.config import Config
 
         config = Config.from_env()
         assert config.auth_token == token

@@ -27,7 +27,6 @@ def register_tools_webhooks(
         webhook_mgr: WebhookManager instance (None if webhooks disabled)
         config: Config instance for permission checks
     """
-    _config = config
 
     @mcp.tool()
     def tool_register_webhook(
@@ -64,7 +63,7 @@ def register_tools_webhooks(
         if webhook_mgr is None:
             raise ValueError("Webhooks are disabled on this server")
 
-        check_write_permission(_config)
+        check_write_permission(config)
         return webhook_mgr.register(
             url=url,
             secret=secret,
@@ -86,7 +85,7 @@ def register_tools_webhooks(
         if webhook_mgr is None:
             raise ValueError("Webhooks are disabled on this server")
 
-        check_write_permission(_config)
+        check_write_permission(config)
         return webhook_mgr.unregister(subscription_id)
 
     @mcp.tool()

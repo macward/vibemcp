@@ -4,15 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe_mcp.config import Config, get_config, reset_config
-
-
-@pytest.fixture(autouse=True)
-def _clean_config():
-    """Reset config before and after each test."""
-    reset_config()
-    yield
-    reset_config()
+from vibe_mcp.config import Config
 
 
 def test_config_defaults():
@@ -35,18 +27,10 @@ def test_config_from_env(monkeypatch):
     assert config.vibe_db == Path("/custom/db.sqlite")
 
 
-def test_get_config_singleton():
-    """Test get_config returns the same instance."""
-    config1 = get_config()
-    config2 = get_config()
-    assert config1 is config2
-
-
-def test_reset_config():
-    """Test reset_config clears the singleton."""
-    config1 = get_config()
-    reset_config()
-    config2 = get_config()
+def test_config_from_env_creates_new_instances():
+    """Test Config.from_env() creates new instances each time."""
+    config1 = Config.from_env()
+    config2 = Config.from_env()
     assert config1 is not config2
 
 

@@ -96,24 +96,16 @@ def get_auth_provider(config: Config | None = None) -> BearerTokenVerifier | Non
     return None
 
 
-def check_write_permission(config: Config | None = None) -> None:
+def check_write_permission(config: Config) -> None:
     """
     Check if write operations are allowed.
 
     Args:
-        config: Config instance (if None, uses deprecated get_config())
+        config: Config instance
 
     Raises:
         AuthError: If the server is in read-only mode
     """
-    if config is None:
-        warnings.warn(
-            "check_write_permission() without config is deprecated. Pass config explicitly.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        config = get_config()
-
     if config.read_only:
         logger.warning("Write operation rejected: server is in read-only mode")
         raise AuthError("Server is in read-only mode")

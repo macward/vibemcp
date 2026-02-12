@@ -1,11 +1,12 @@
 """Tests for MCP resources."""
 
 import tempfile
+import warnings
 from pathlib import Path
 
 import pytest
 
-from vibe_mcp.config import get_config, reset_config
+from vibe_mcp.config import Config, reset_config
 from vibe_mcp.indexer.database import Database
 from vibe_mcp.resources import (
     _count_files_in_folder,
@@ -18,11 +19,24 @@ from vibe_mcp.resources import (
 )
 
 
+def _reset_config_silent():
+    """Reset config singleton without triggering deprecation warning.
+
+    This is needed because resources.py still uses get_config() internally,
+    and we need to reset the cached config between tests to pick up different
+    environment variables. Once resources.py is migrated to DI, this can be removed.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        reset_config()
+
+
 @pytest.fixture
 def vibe_root(monkeypatch):
     """Create a temporary vibe root with sample projects."""
     with tempfile.TemporaryDirectory() as tmpdir:
         vibe_path = Path(tmpdir)
+        db_path = vibe_path / "index.db"
 
         # Create a sample project structure
         project_path = vibe_path / "test-project"
@@ -45,23 +59,22 @@ def vibe_root(monkeypatch):
         session = project_path / "sessions" / "2026-02-09.md"
         session.write_text("# Session notes\n\nSome notes")
 
-        # Set environment variables
+        # Set environment variables for Config.from_env() in tests
         monkeypatch.setenv("VIBE_ROOT", str(vibe_path))
-        monkeypatch.setenv("VIBE_DB", str(vibe_path / "index.db"))
+        monkeypatch.setenv("VIBE_DB", str(db_path))
 
-        # Reset config to pick up new env vars
-        reset_config()
+        # Reset config to pick up new env vars (needed because resources.py uses get_config())
+        _reset_config_silent()
 
         # Initialize database and index the project
-        config = get_config()
-        db = Database(config.vibe_db)
+        db = Database(db_path)
         db.initialize()
         project_id = db.get_or_create_project("test-project", str(project_path))
         db.close()
 
         yield vibe_path
 
-        reset_config()
+        _reset_config_silent()
 
 
 class TestPathValidation:
@@ -128,19 +141,20 @@ class TestProjectsResource:
     def test_get_projects_resource_empty(self, monkeypatch):
         with tempfile.TemporaryDirectory() as tmpdir:
             vibe_path = Path(tmpdir)
+            db_path = vibe_path / "index.db"
             monkeypatch.setenv("VIBE_ROOT", str(vibe_path))
-            monkeypatch.setenv("VIBE_DB", str(vibe_path / "index.db"))
-            reset_config()
+            monkeypatch.setenv("VIBE_DB", str(db_path))
 
-            config = get_config()
-            db = Database(config.vibe_db)
+            _reset_config_silent()
+
+            db = Database(db_path)
             db.initialize()
             db.close()
 
             result = get_projects_resource()
             assert "Total projects: 0" in result
 
-            reset_config()
+            _reset_config_silent()
 
 
 class TestProjectDetailResource:

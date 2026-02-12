@@ -691,20 +691,3 @@ def register_tools_write(
         )
 
         return result
-
-
-# =============================================================================
-# DEPRECATED: Re-exports for backwards compatibility
-# These are deprecated and will be removed in v2.0.
-# Use register_tools_write() with dependency injection instead.
-# =============================================================================
-from vibe_mcp.tools_write_compat import (  # noqa: E402, F401
-    create_doc,
-    create_plan,
-    create_task,
-    init_project,
-    log_session,
-    reindex,
-    update_doc,
-    update_task_status,
-)

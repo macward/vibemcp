@@ -2,7 +2,7 @@
 
 import pytest
 
-from vibe_mcp.config import reset_config
+from vibe_mcp.config import Config
 from vibe_mcp.indexer import Database, Indexer
 from vibe_mcp.indexer.models import Document
 
@@ -12,6 +12,7 @@ def test_vibe_root(tmp_path, monkeypatch):
     """Create a temporary vibe root for testing."""
     vibe_root = tmp_path / ".vibe"
     vibe_root.mkdir()
+    db_path = vibe_root / "test.db"
 
     # Create a test project with tasks
     test_project = vibe_root / "test_project"
@@ -88,12 +89,8 @@ Deploy feature plan.
 """)
 
     # Set environment variables
-    db_path = vibe_root / "test.db"
     monkeypatch.setenv("VIBE_ROOT", str(vibe_root))
     monkeypatch.setenv("VIBE_DB", str(db_path))
-
-    # Reset config
-    reset_config()
 
     # Index the files
     indexer = Indexer(vibe_root, db_path)
@@ -104,11 +101,9 @@ Deploy feature plan.
 
 
 @pytest.fixture
-def db(test_vibe_root, tmp_path):
+def db(test_vibe_root, tmp_path, monkeypatch):
     """Get database instance."""
-    from vibe_mcp.config import get_config
-
-    config = get_config()
+    config = Config.from_env()
     db = Database(config.vibe_db)
     db.initialize()
     return db

@@ -10,81 +10,38 @@ All write tools automatically:
 - Trigger re-indexation after writing
 - Create parent directories as needed
 
-## Tools
+## Setup with Dependency Injection
 
-### `create_doc`
+Write tools are registered using the `register_tools_write()` function. This pattern enables proper dependency injection:
 
-Create a new document in any project folder.
-
-**Parameters:**
-- `project` (str): Project name
-- `folder` (str): Folder name (e.g., "tasks", "plans", "references") or "" for root
-- `filename` (str): File name (`.md` extension added automatically if missing)
-- `content` (str): Document content
-
-**Returns:**
 ```python
-{
-    "status": "created",
-    "path": "project/folder/filename.md",
-    "absolute_path": "/path/to/.vibe/project/folder/filename.md"
-}
+from fastmcp import FastMCP
+from vibe_mcp.config import Config
+from vibe_mcp.indexer import Indexer
+from vibe_mcp.webhooks import WebhookManager
+from vibe_mcp.indexer.database import Database
+from vibe_mcp.tools_write import register_tools_write
+
+# Create dependencies
+config = Config.from_env()
+db = Database(config.vibe_db)
+db.initialize()
+indexer = Indexer(config.vibe_root, config.vibe_db)
+indexer.initialize()
+
+# Optional: create webhook manager for event notifications
+webhook_mgr = WebhookManager(db, config)  # or None to disable webhooks
+
+# Create FastMCP server and register tools
+mcp = FastMCP("vibeMCP")
+register_tools_write(mcp, config, indexer, webhook_mgr=webhook_mgr)
+
+# Tools are now available as MCP tools
 ```
 
-**Example:**
-```python
-from vibe_mcp.tools_write import create_doc
+## Available Tools
 
-create_doc(
-    project="myproject",
-    folder="references",
-    filename="api-spec",
-    content="# API Specification\n\n## Endpoints\n..."
-)
-```
-
-**Errors:**
-- Raises `ValueError` if file already exists
-- Raises `ValueError` if path contains directory traversal attempts
-
----
-
-### `update_doc`
-
-Update an existing document.
-
-**Parameters:**
-- `project` (str): Project name
-- `path` (str): Relative path within project (e.g., "tasks/001-example.md")
-- `content` (str): New document content
-
-**Returns:**
-```python
-{
-    "status": "updated",
-    "path": "project/path/to/file.md",
-    "absolute_path": "/path/to/.vibe/project/path/to/file.md"
-}
-```
-
-**Example:**
-```python
-from vibe_mcp.tools_write import update_doc
-
-update_doc(
-    project="myproject",
-    path="tasks/001-feature.md",
-    content="# Task: Feature X\n\nStatus: done\n..."
-)
-```
-
-**Errors:**
-- Raises `ValueError` if file doesn't exist
-- Raises `ValueError` if path contains directory traversal attempts
-
----
-
-### `create_task`
+### `tool_create_task`
 
 Create a new task with auto-generated sequential number and standard format.
 
@@ -93,6 +50,7 @@ Create a new task with auto-generated sequential number and standard format.
 - `title` (str): Task title
 - `objective` (str): Task objective/description
 - `steps` (list[str], optional): List of steps
+- `feature` (str, optional): Feature tag for grouping related tasks
 
 **Returns:**
 ```python
@@ -101,28 +59,12 @@ Create a new task with auto-generated sequential number and standard format.
     "task_number": 1,
     "filename": "001-task-title.md",
     "path": "project/tasks/001-task-title.md",
-    "absolute_path": "/path/to/.vibe/project/tasks/001-task-title.md"
+    "absolute_path": "/path/to/.vibe/project/tasks/001-task-title.md",
+    "feature": "auth"  # if feature was provided
 }
 ```
 
-**Example:**
-```python
-from vibe_mcp.tools_write import create_task
-
-create_task(
-    project="myproject",
-    title="Implement Authentication",
-    objective="Add JWT-based authentication to the API",
-    steps=[
-        "Design token structure",
-        "Implement token generation",
-        "Add middleware for validation",
-        "Write tests"
-    ]
-)
-```
-
-**Generated Format:**
+**Generated Format (without feature):**
 ```markdown
 # Task: Implement Authentication
 
@@ -138,15 +80,30 @@ Add JWT-based authentication to the API
 4. [ ] Write tests
 ```
 
+**Generated Format (with feature):**
+```markdown
+---
+type: task
+status: pending
+feature: auth
+---
+
+# Task: Implement Authentication
+
+## Objective
+Add JWT-based authentication to the API
+```
+
 **Features:**
 - Auto-generates sequential task numbers (001, 002, 003, etc.)
 - Sanitizes title for filename (removes special characters, converts to lowercase with hyphens)
 - Creates `tasks/` directory if it doesn't exist
 - Initial status is always "pending"
+- When `feature` is provided, uses YAML frontmatter format
 
 ---
 
-### `update_task_status`
+### `tool_update_task_status`
 
 Update the status of a task.
 
@@ -165,17 +122,6 @@ Update the status of a task.
 }
 ```
 
-**Example:**
-```python
-from vibe_mcp.tools_write import update_task_status
-
-update_task_status(
-    project="myproject",
-    task_file="001-implement-authentication.md",
-    new_status="in-progress"
-)
-```
-
 **Valid Statuses:**
 - `pending`: Task is queued but not started
 - `in-progress`: Task is currently being worked on
@@ -188,56 +134,34 @@ update_task_status(
 
 ---
 
-### `create_plan`
+### `tool_create_plan`
 
-Create or update the execution plan for a project.
+Create or update an execution plan for a project.
 
 **Parameters:**
 - `project` (str): Project name
 - `content` (str): Plan content
+- `filename` (str, optional): Plan filename (default: "execution-plan.md")
 
 **Returns:**
 ```python
 {
     "status": "created",  # or "updated" if plan already exists
+    "filename": "execution-plan.md",
     "path": "project/plans/execution-plan.md",
     "absolute_path": "/path/to/.vibe/project/plans/execution-plan.md"
 }
 ```
 
-**Example:**
-```python
-from vibe_mcp.tools_write import create_plan
-
-plan_content = """# Execution Plan
-
-## Phase 1: Foundation
-- [ ] Setup project structure
-- [ ] Configure CI/CD
-- [ ] Setup database
-
-## Phase 2: Core Features
-- [ ] Implement authentication
-- [ ] Build API endpoints
-- [ ] Add validation
-
-## Phase 3: Polish
-- [ ] Write documentation
-- [ ] Performance optimization
-- [ ] Security audit
-"""
-
-create_plan(project="myproject", content=plan_content)
-```
-
 **Features:**
-- Always uses `execution-plan.md` as filename
+- Default filename is `execution-plan.md`
+- Use `feature-<name>.md` for feature-specific plans
 - Creates `plans/` directory if it doesn't exist
 - Returns "created" on first call, "updated" on subsequent calls
 
 ---
 
-### `log_session`
+### `tool_log_session`
 
 Create or append to a session log for today's date.
 
@@ -253,23 +177,6 @@ Create or append to a session log for today's date.
     "path": "project/sessions/2026-02-09.md",
     "absolute_path": "/path/to/.vibe/project/sessions/2026-02-09.md"
 }
-```
-
-**Example:**
-```python
-from vibe_mcp.tools_write import log_session
-
-# First entry of the day
-log_session(
-    project="myproject",
-    content="Started working on authentication feature. Reviewing JWT libraries."
-)
-
-# Later in the day
-log_session(
-    project="myproject",
-    content="Implemented token generation. Moving to validation middleware next."
-)
 ```
 
 **Generated Format (First Entry):**
@@ -299,7 +206,32 @@ Implemented token generation. Moving to validation middleware next.
 
 ---
 
-### `reindex`
+### `tool_create_doc`
+
+Create a new document in any project folder.
+
+**Parameters:**
+- `project` (str): Project name
+- `folder` (str): Folder name (e.g., "tasks", "plans", "references") or "" for root
+- `filename` (str): File name (`.md` extension added automatically if missing)
+- `content` (str): Document content
+
+**Returns:**
+```python
+{
+    "status": "created",
+    "path": "project/folder/filename.md",
+    "absolute_path": "/path/to/.vibe/project/folder/filename.md"
+}
+```
+
+**Errors:**
+- Raises `ValueError` if file already exists
+- Raises `ValueError` if path contains directory traversal attempts
+
+---
+
+### `tool_reindex`
 
 Force a full reindex of all projects.
 
@@ -313,14 +245,6 @@ Force a full reindex of all projects.
 }
 ```
 
-**Example:**
-```python
-from vibe_mcp.tools_write import reindex
-
-result = reindex()
-print(f"Reindexed {result['document_count']} documents")
-```
-
 **When to Use:**
 - After manual file modifications outside of the tools
 - If search results seem stale or incomplete
@@ -331,7 +255,7 @@ print(f"Reindexed {result['document_count']} documents")
 
 ---
 
-### `init_project`
+### `tool_init_project`
 
 Initialize a new project with the standard directory structure.
 
@@ -347,14 +271,6 @@ Initialize a new project with the standard directory structure.
     "absolute_path": "/path/to/.vibe/myproject",
     "folders": ["tasks", "plans", "sessions", "reports", "changelog", "references", "scratch", "assets"]
 }
-```
-
-**Example:**
-```python
-from vibe_mcp.tools_write import init_project
-
-result = init_project(project="new-api")
-print(f"Created project at {result['absolute_path']}")
 ```
 
 **Created Structure:**
@@ -382,11 +298,6 @@ Status: setup
 - Raises `ValueError` if project name contains directory traversal attempts (`..`, `/`, `\`)
 - Raises `ValueError` if project already exists
 
-**When to Use:**
-- To bootstrap a new project with the standard vibe workspace structure
-- When starting work on a new codebase that needs task tracking
-- To ensure consistent folder organization across all projects
-
 ---
 
 ## Error Handling
@@ -398,25 +309,11 @@ All tools validate inputs and raise `ValueError` with descriptive messages when:
 - Files already exist (for create operations)
 - Invalid status values (for task status updates)
 
-Example error handling:
-```python
-from vibe_mcp.tools_write import create_task
-
-try:
-    create_task(
-        project="myproject",
-        title="Test Task",
-        objective="Test"
-    )
-except ValueError as e:
-    print(f"Error: {e}")
-```
-
 ---
 
 ## Configuration
 
-All tools use the global configuration from `vibe_mcp.config`:
+Tools use the `Config` class loaded from environment variables:
 
 - `VIBE_ROOT`: Root directory for all projects (default: `~/.vibe`)
 - `VIBE_DB`: SQLite database path (default: `~/.vibe/index.db`)
@@ -426,6 +323,21 @@ Set via environment variables:
 export VIBE_ROOT=/custom/path/.vibe
 export VIBE_DB=/custom/path/index.db
 ```
+
+---
+
+## Integration with Webhooks
+
+When a `WebhookManager` is provided to `register_tools_write()`, events are fired for:
+- `task.created` - when a new task is created
+- `task.updated` - when a task status is updated
+- `plan.created` / `plan.updated` - when a plan is created or updated
+- `session.logged` - when a session entry is logged
+- `doc.created` - when a document is created
+- `project.initialized` - when a new project is initialized
+- `index.reindexed` - when a full reindex is completed
+
+If `webhook_mgr=None`, events are silently skipped.
 
 ---
 
