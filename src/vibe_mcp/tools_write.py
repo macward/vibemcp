@@ -310,6 +310,7 @@ def create_task(
     title: str,
     objective: str,
     steps: list[str] | None = None,
+    feature: str | None = None,
 ) -> dict:
     """
     Create a new task with auto-generated number and standard format.
@@ -319,6 +320,7 @@ def create_task(
         title: Task title
         objective: Task objective
         steps: Optional list of steps
+        feature: Optional feature tag for grouping related tasks
 
     Returns:
         Dict with status, task number, and file path
@@ -342,16 +344,37 @@ def create_task(
     safe_title = re.sub(r"[-\s]+", "-", safe_title).strip("-")
     filename = f"{task_num:03d}-{safe_title}.md"
 
-    # Build content
-    content_lines = [
+    # Build content with optional frontmatter
+    content_lines = []
+
+    # Add frontmatter if feature is specified
+    if feature:
+        content_lines.extend([
+            "---",
+            "type: task",
+            "status: pending",
+            f"feature: {feature}",
+            "---",
+            "",
+        ])
+
+    content_lines.extend([
         f"# Task: {title}",
         "",
-        "Status: pending",
-        "",
+    ])
+
+    # Only add status line if no frontmatter (to avoid duplication)
+    if not feature:
+        content_lines.extend([
+            "Status: pending",
+            "",
+        ])
+
+    content_lines.extend([
         "## Objective",
         objective,
         "",
-    ]
+    ])
 
     if steps:
         content_lines.append("## Steps")
@@ -383,20 +406,21 @@ def create_task(
         "filename": filename,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
+        "feature": feature,
     }
 
     # Fire webhook
-    _fire_webhook(
-        "task.created",
-        project,
-        {
-            "task_number": task_num,
-            "title": title,
-            "filename": filename,
-            "path": result["path"],
-            "status": "pending",
-        },
-    )
+    webhook_data = {
+        "task_number": task_num,
+        "title": title,
+        "filename": filename,
+        "path": result["path"],
+        "status": "pending",
+    }
+    if feature:
+        webhook_data["feature"] = feature
+
+    _fire_webhook("task.created", project, webhook_data)
 
     return result
 
@@ -497,13 +521,15 @@ def update_task_status(project: str, task_file: str, new_status: str) -> dict:
     return result
 
 
-def create_plan(project: str, content: str) -> dict:
+def create_plan(project: str, content: str, filename: str = "execution-plan.md") -> dict:
     """
-    Create or update the execution plan for a project.
+    Create or update a plan file for a project.
 
     Args:
         project: Project name
         content: Plan content
+        filename: Plan filename (default: "execution-plan.md"). Use "feature-<name>.md"
+                  for feature-specific plans.
 
     Returns:
         Dict with status and file path
@@ -518,25 +544,33 @@ def create_plan(project: str, content: str) -> dict:
     # Validate project path
     project_path = _validate_project_path(project, config.vibe_root)
 
+    # Ensure filename ends with .md
+    if not filename.endswith(".md"):
+        filename = f"{filename}.md"
+
+    # Prevent directory traversal in filename
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise ValueError("Invalid filename: cannot contain path separators")
+
     # Create plans directory if needed
     plans_dir = project_path / "plans"
     plans_dir.mkdir(parents=True, exist_ok=True)
 
-    # Plan file is always execution-plan.md
-    file_path = plans_dir / "execution-plan.md"
+    file_path = plans_dir / filename
 
     # Determine if creating or updating
     action = "updated" if file_path.exists() else "created"
 
     # Write content
     file_path.write_text(content, encoding="utf-8")
-    logger.info("%s execution plan: %s", action.capitalize(), file_path.relative_to(config.vibe_root))
+    logger.info("%s plan: %s", action.capitalize(), file_path.relative_to(config.vibe_root))
 
     # Reindex
     _reindex_file(file_path)
 
     result = {
         "status": action,
+        "filename": filename,
         "path": str(file_path.relative_to(config.vibe_root)),
         "absolute_path": str(file_path),
     }
@@ -547,7 +581,7 @@ def create_plan(project: str, content: str) -> dict:
         event_type,
         project,
         {
-            "filename": "execution-plan.md",
+            "filename": filename,
             "path": result["path"],
         },
     )
@@ -743,6 +777,7 @@ def register_tools_write(mcp) -> None:
         title: str,
         objective: str,
         steps: list[str] | None = None,
+        feature: str | None = None,
     ) -> dict:
         """Create a new task with auto-generated number and standard format.
 
@@ -751,11 +786,12 @@ def register_tools_write(mcp) -> None:
             title: Task title
             objective: Task objective
             steps: Optional list of steps
+            feature: Optional feature tag for grouping related tasks
 
         Returns:
             Dict with status, task number, and file path
         """
-        return create_task(project, title, objective, steps)
+        return create_task(project, title, objective, steps, feature)
 
     @mcp.tool()
     def tool_log_session(project: str, content: str) -> dict:
@@ -822,3 +858,22 @@ def register_tools_write(mcp) -> None:
             Dict with status, project name, and paths
         """
         return init_project(project)
+
+    @mcp.tool()
+    def tool_create_plan(
+        project: str,
+        content: str,
+        filename: str = "execution-plan.md",
+    ) -> dict:
+        """Create or update a plan file for a project.
+
+        Args:
+            project: Project name
+            content: Plan content
+            filename: Plan filename (default: "execution-plan.md"). Use "feature-<name>.md"
+                      for feature-specific plans.
+
+        Returns:
+            Dict with status and file path
+        """
+        return create_plan(project, content, filename)

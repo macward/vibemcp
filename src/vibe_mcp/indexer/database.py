@@ -10,12 +10,13 @@ from pathlib import Path
 
 from vibe_mcp.indexer.models import Chunk, Document, Project, SearchResult
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 
 SCHEMA_SQL = """
--- vibeMCP Index Schema v1.1
+-- vibeMCP Index Schema v1.2
 -- This index is disposable: it regenerates from VIBE_ROOT/
 -- v1.1: Added webhook_subscriptions and webhook_logs tables
+-- v1.2: Added feature column for feature-based task grouping
 
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS documents (
     status       TEXT,
     owner        TEXT,
     tags         TEXT,
+    feature      TEXT,
     content_hash TEXT NOT NULL,
     mtime        REAL NOT NULL,
     updated      TEXT,
@@ -53,6 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_feature ON documents(feature);
 CREATE INDEX IF NOT EXISTS idx_documents_mtime ON documents(mtime DESC);
 CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_documents_project_folder ON documents(project_id, folder);
@@ -141,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_webhook_logs_subscription ON webhook_logs(subscri
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_event_id ON webhook_logs(event_id);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
 
-INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1.1');
+INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '1.2');
 INSERT OR REPLACE INTO meta (key, value) VALUES ('created_at', datetime('now'));
 """
 
@@ -315,8 +318,8 @@ class Database:
         with self._write_cursor() as cursor:
             cursor.execute(
                 """INSERT INTO documents
-                (project_id, path, folder, filename, type, status, owner, tags, content_hash, mtime, updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (project_id, path, folder, filename, type, status, owner, tags, feature, content_hash, mtime, updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     project_id = excluded.project_id,
                     folder = excluded.folder,
@@ -325,6 +328,7 @@ class Database:
                     status = excluded.status,
                     owner = excluded.owner,
                     tags = excluded.tags,
+                    feature = excluded.feature,
                     content_hash = excluded.content_hash,
                     mtime = excluded.mtime,
                     updated = excluded.updated,
@@ -339,6 +343,7 @@ class Database:
                     doc.status,
                     doc.owner,
                     tags_json,
+                    doc.feature,
                     doc.content_hash,
                     doc.mtime,
                     doc.updated,
@@ -408,6 +413,7 @@ class Database:
             status=row["status"],
             owner=row["owner"],
             tags=tags,
+            feature=row["feature"],
             content_hash=row["content_hash"],
             mtime=row["mtime"],
             updated=row["updated"],

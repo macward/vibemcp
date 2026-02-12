@@ -31,6 +31,7 @@ class Document:
     content_hash: str = ""
     mtime: float = 0.0
     updated: str | None = None  # From frontmatter
+    feature: str | None = None  # Feature tag for grouping tasks
     indexed_at: datetime | None = None
 
 

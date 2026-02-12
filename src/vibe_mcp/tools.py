@@ -158,6 +158,7 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
                 "updated": frontmatter.updated or updated,
                 "tags": frontmatter.tags or [],
                 "owner": frontmatter.owner,
+                "feature": frontmatter.feature,
             }
 
             return {
@@ -186,12 +187,14 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
     def list_tasks(
         project: str | None = None,
         status: str | None = None,
+        feature: str | None = None,
     ) -> list[dict]:
         """List tasks from a project or across all projects.
 
         Args:
             project: Optional project name to filter tasks
             status: Optional status filter (pending/in-progress/done/blocked)
+            feature: Optional feature filter to list tasks for a specific feature
 
         Returns:
             List of tasks with:
@@ -201,6 +204,7 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
             - status: Task status (pending/in-progress/done/blocked/null)
             - owner: Task owner (if assigned)
             - updated: Last update date (if available)
+            - feature: Feature tag (if assigned)
         """
         # Use raw SQL query to join projects and documents for efficiency
         query = """
@@ -210,7 +214,8 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
                 d.filename,
                 d.status,
                 d.owner,
-                d.updated
+                d.updated,
+                d.feature
             FROM documents d
             JOIN projects p ON d.project_id = p.id
             WHERE d.folder = 'tasks'
@@ -224,6 +229,10 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
         if status:
             query += " AND d.status = ?"
             params.append(status)
+
+        if feature:
+            query += " AND d.feature = ?"
+            params.append(feature)
 
         query += " ORDER BY d.path"
 
@@ -239,6 +248,7 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
                     "status": row["status"],
                     "owner": row["owner"],
                     "updated": row["updated"],
+                    "feature": row["feature"],
                 })
 
         return results
@@ -331,3 +341,59 @@ def register_tools(mcp: FastMCP, db: Database) -> None:
                 "content": None,
                 "error": f"Error reading plan: {e}",
             }
+
+    @mcp.tool()
+    def list_plans(project: str) -> list[dict]:
+        """List all plan files for a project.
+
+        Args:
+            project: Name of the project
+
+        Returns:
+            List of plans with:
+            - filename: Plan filename (e.g., "execution-plan.md", "feature-auth.md")
+            - title: First heading from the plan (if available)
+            - updated: Last modification date
+        """
+        config = get_config()
+        plans_dir = config.vibe_root / project / "plans"
+
+        # Validate path is within VIBE_ROOT (security check)
+        try:
+            plans_dir = plans_dir.resolve()
+            if not str(plans_dir).startswith(str(config.vibe_root.resolve())):
+                return []
+        except (ValueError, OSError):
+            return []
+
+        if not plans_dir.exists() or not plans_dir.is_dir():
+            return []
+
+        results = []
+        for file_path in sorted(plans_dir.glob("*.md")):
+            if not file_path.is_file():
+                continue
+
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                mtime = file_path.stat().st_mtime
+                updated = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+
+                # Extract title from first heading
+                title = None
+                for line in content.split("\n"):
+                    line = line.strip()
+                    if line.startswith("# "):
+                        title = line[2:].strip()
+                        break
+
+                results.append({
+                    "filename": file_path.name,
+                    "title": title,
+                    "updated": updated,
+                })
+            except Exception:
+                # Skip files that can't be read
+                continue
+
+        return results

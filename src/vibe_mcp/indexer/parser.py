@@ -20,6 +20,7 @@ class FrontmatterData:
     updated: str | None = None
     tags: list[str] | None = None
     owner: str | None = None
+    feature: str | None = None
     raw: dict | None = None
 
 
@@ -71,6 +72,7 @@ def parse_frontmatter(content: str, file_path: str) -> tuple[FrontmatterData, st
                     if updated is not None:
                         data.updated = str(updated)
                     data.owner = raw.get("owner")
+                    data.feature = raw.get("feature")
 
                     tags = raw.get("tags")
                     if isinstance(tags, list):
