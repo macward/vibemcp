@@ -1,6 +1,6 @@
 # vibeMCP
 
-vibe: vibeMCP
+vibe: vibe-mcp
 branch: develop
 
 ## Qué es

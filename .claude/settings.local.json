@@ -4,7 +4,26 @@
       "Bash(uv pip install:*)",
       "Bash(uv run pytest:*)",
       "Bash(uv run ruff check:*)",
-      "Bash(/Users/maxward/bin/vibe-init.sh:*)"
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "mcp__vibeMCP__tool_update_task_status",
+      "mcp__vibeMCP__list_tasks",
+      "Bash(docker compose config:*)",
+      "Bash(docker build:*)",
+      "Bash(docker compose build:*)",
+      "Bash(timeout 15 docker compose:*)",
+      "Bash(VIBE_DATA_DIR=/Users/maxward/Developer/1_PROJECTS/VibeWorkspace/vibeMCP/.docker-data timeout 15 docker compose:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(curl:*)",
+      "Bash(TOKEN=\"1413663e4c9df66f9916281644bc350bee4b175c9c0b012840f551dffb4fc04c\")",
+      "Bash(echo:*)",
+      "Bash(timeout 5 uv run:*)",
+      "Bash(wc:*)",
+      "Bash(python -m pytest:*)",
+      "mcp__excalidraw__read_me",
+      "mcp__excalidraw__create_view",
+      "mcp__vibeMCP__tool_create_doc"
     ]
   }
 }

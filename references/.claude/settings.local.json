@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python -m ruff check:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(source:*)",
+      "Bash(ruff check:*)",
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "WebSearch",
+      "Bash(python -m py_compile:*)",
+      "Bash(uv run python:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(PYTHONPATH=src python:*)",
+      "Bash(pip show:*)",
+      "Bash(pip search:*)",
+      "Bash(pip index:*)",
+      "Bash(head:*)",
+      "Bash(timeout:*)"
+    ]
+  }
+}
