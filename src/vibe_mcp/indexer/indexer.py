@@ -1,6 +1,7 @@
 """Main indexer that coordinates syncing filesystem to SQLite."""
 
 import logging
+import threading
 from pathlib import Path
 
 from vibe_mcp.indexer.chunker import chunk_document
@@ -18,6 +19,11 @@ class Indexer:
 
     The filesystem is always the source of truth. SQLite is a derived index
     that can be regenerated at any time.
+
+    Thread Safety:
+        Write operations (reindex, sync, index_project, index_file) are protected
+        by a lock to prevent concurrent modifications. Read operations are safe
+        to call from multiple threads as the Database uses thread-local connections.
     """
 
     def __init__(self, vibe_root: Path, db_path: Path):
@@ -31,6 +37,7 @@ class Indexer:
         self.vibe_root = vibe_root
         self.db = Database(db_path)
         self._initialized = False
+        self._write_lock = threading.Lock()
 
     def initialize(self) -> None:
         """Initialize the database schema."""
@@ -53,18 +60,19 @@ class Indexer:
         Returns the number of documents indexed.
         """
         self._ensure_initialized()
-        logger.info("Starting full reindex of %s", self.vibe_root)
+        with self._write_lock:
+            logger.info("Starting full reindex of %s", self.vibe_root)
 
-        # Clear all data
-        self.db.clear()
+            # Clear all data
+            self.db.clear()
 
-        count = 0
-        for file_info in walk_vibe_root(self.vibe_root):
-            self._index_file(file_info)
-            count += 1
+            count = 0
+            for file_info in walk_vibe_root(self.vibe_root):
+                self._index_file(file_info)
+                count += 1
 
-        logger.info("Reindex complete: %d documents indexed", count)
-        return count
+            logger.info("Reindex complete: %d documents indexed", count)
+            return count
 
     def sync(self) -> tuple[int, int, int]:
         """
@@ -76,56 +84,57 @@ class Indexer:
             Tuple of (added, updated, deleted) counts.
         """
         self._ensure_initialized()
-        logger.info("Syncing index with filesystem")
+        with self._write_lock:
+            logger.debug("Syncing index with filesystem")
 
-        added = 0
-        updated = 0
-        deleted = 0
+            added = 0
+            updated = 0
+            deleted = 0
 
-        # Track all paths we see in the filesystem
-        seen_paths: set[str] = set()
+            # Track all paths we see in the filesystem
+            seen_paths: set[str] = set()
 
-        # Process all files
-        for file_info in walk_vibe_root(self.vibe_root):
-            seen_paths.add(file_info.relative_path)
+            # Process all files
+            for file_info in walk_vibe_root(self.vibe_root):
+                seen_paths.add(file_info.relative_path)
 
-            # Check if document exists and if it has changed
-            existing_mtime = self.db.get_document_mtime(file_info.relative_path)
+                # Check if document exists and if it has changed
+                existing_mtime = self.db.get_document_mtime(file_info.relative_path)
 
-            if existing_mtime is None:
-                # New file
-                self._index_file(file_info)
-                added += 1
-            elif abs(file_info.mtime - existing_mtime) > 0.001:  # mtime changed
-                # Check content hash for actual change
-                existing_hash = self.db.get_document_hash(file_info.relative_path)
-                if existing_hash != file_info.content_hash:
-                    # Content actually changed
+                if existing_mtime is None:
+                    # New file
                     self._index_file(file_info)
-                    updated += 1
-                else:
-                    # Only mtime changed, update it
-                    doc = self.db.get_document_by_path(file_info.relative_path)
-                    if doc:
-                        doc.mtime = file_info.mtime
-                        self.db.upsert_document(doc)
+                    added += 1
+                elif abs(file_info.mtime - existing_mtime) > 0.001:  # mtime changed
+                    # Check content hash for actual change
+                    existing_hash = self.db.get_document_hash(file_info.relative_path)
+                    if existing_hash != file_info.content_hash:
+                        # Content actually changed
+                        self._index_file(file_info)
+                        updated += 1
+                    else:
+                        # Only mtime changed, update it
+                        doc = self.db.get_document_by_path(file_info.relative_path)
+                        if doc:
+                            doc.mtime = file_info.mtime
+                            self.db.upsert_document(doc)
 
-        # Find deleted files
-        all_projects = self.db.list_projects()
-        for project in all_projects:
-            indexed_paths = self.db.get_indexed_paths(project.name)
-            for path in indexed_paths:
-                if path not in seen_paths:
-                    self.db.delete_document(path)
-                    deleted += 1
+            # Find deleted files
+            all_projects = self.db.list_projects()
+            for project in all_projects:
+                indexed_paths = self.db.get_indexed_paths(project.name)
+                for path in indexed_paths:
+                    if path not in seen_paths:
+                        self.db.delete_document(path)
+                        deleted += 1
 
-        logger.info(
-            "Sync complete: %d added, %d updated, %d deleted",
-            added,
-            updated,
-            deleted,
-        )
-        return added, updated, deleted
+            logger.debug(
+                "Sync complete: %d added, %d updated, %d deleted",
+                added,
+                updated,
+                deleted,
+            )
+            return added, updated, deleted
 
     def index_project(self, project_path: Path) -> int:
         """
@@ -138,17 +147,28 @@ class Indexer:
             Number of documents indexed.
         """
         self._ensure_initialized()
-        project_name = project_path.name
-        logger.info("Indexing project: %s", project_name)
+        with self._write_lock:
+            project_name = project_path.name
+            logger.info("Indexing project: %s", project_name)
 
-        count = 0
-        for file_info in walk_vibe_root(project_path.parent):
-            if file_info.project_name == project_name:
-                self._index_file(file_info)
-                count += 1
+            count = 0
+            for file_info in walk_vibe_root(project_path.parent):
+                if file_info.project_name == project_name:
+                    self._index_file(file_info)
+                    count += 1
 
-        logger.info("Project %s: %d documents indexed", project_name, count)
-        return count
+            logger.info("Project %s: %d documents indexed", project_name, count)
+            return count
+
+    def index_file(self, file_info: FileInfo) -> None:
+        """
+        Index a single file (thread-safe).
+
+        Args:
+            file_info: FileInfo object with file metadata.
+        """
+        with self._write_lock:
+            self._index_file(file_info)
 
     def _index_file(self, file_info: FileInfo) -> None:
         """Index a single file."""
