@@ -54,3 +54,37 @@ def test_config_invalid_port_out_of_range(monkeypatch):
     monkeypatch.setenv("VIBE_PORT", "70000")
     with pytest.raises(ValueError, match="Port must be between 1 and 65535"):
         Config.from_env()
+
+
+def test_config_sync_interval_default():
+    """Test sync_interval defaults to 30 seconds."""
+    config = Config.from_env()
+    assert config.sync_interval == 30
+
+
+def test_config_sync_interval_from_env(monkeypatch):
+    """Test sync_interval loads from environment."""
+    monkeypatch.setenv("VIBE_SYNC_INTERVAL", "60")
+    config = Config.from_env()
+    assert config.sync_interval == 60
+
+
+def test_config_sync_interval_disabled(monkeypatch):
+    """Test sync_interval can be set to 0 to disable."""
+    monkeypatch.setenv("VIBE_SYNC_INTERVAL", "0")
+    config = Config.from_env()
+    assert config.sync_interval == 0
+
+
+def test_config_sync_interval_invalid_non_numeric(monkeypatch):
+    """Test config raises error for non-numeric sync interval."""
+    monkeypatch.setenv("VIBE_SYNC_INTERVAL", "fast")
+    with pytest.raises(ValueError, match="Invalid VIBE_SYNC_INTERVAL"):
+        Config.from_env()
+
+
+def test_config_sync_interval_invalid_negative(monkeypatch):
+    """Test config raises error for negative sync interval."""
+    monkeypatch.setenv("VIBE_SYNC_INTERVAL", "-5")
+    with pytest.raises(ValueError, match="Sync interval must be >= 0"):
+        Config.from_env()

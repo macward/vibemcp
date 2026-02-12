@@ -11,6 +11,7 @@ from vibe_mcp.config import Config
 from vibe_mcp.indexer import Database, Indexer
 from vibe_mcp.prompts import register_prompts
 from vibe_mcp.resources import register_resources
+from vibe_mcp.sync import SyncManager
 from vibe_mcp.tools import register_tools
 from vibe_mcp.tools_webhooks import register_tools_webhooks
 from vibe_mcp.tools_write import register_tools_write
@@ -53,6 +54,13 @@ def create_server(config: Config) -> FastMCP:
         logger.info("Database is empty, performing initial index...")
         doc_count = indexer.reindex()
         logger.info("Initial index complete: %d documents indexed", doc_count)
+
+    # Start background sync if enabled
+    if config.sync_interval > 0:
+        sync_manager = SyncManager(indexer, config.sync_interval)
+        sync_manager.start()
+    else:
+        logger.info("Auto-sync disabled (VIBE_SYNC_INTERVAL=0)")
 
     # Initialize webhook manager only if webhooks are enabled
     webhook_mgr: WebhookManager | None = None
@@ -115,6 +123,7 @@ def main() -> None:
     logger.info("  AUTH:      %s", "enabled" if config.auth_token else "disabled")
     logger.info("  READ_ONLY: %s", config.read_only)
     logger.info("  WEBHOOKS:  %s", "enabled" if config.webhooks_enabled else "disabled")
+    logger.info("  SYNC:      %s", f"{config.sync_interval}s" if config.sync_interval > 0 else "disabled")
     logger.info("=" * 50)
 
     # Force reindex if requested (before server starts)

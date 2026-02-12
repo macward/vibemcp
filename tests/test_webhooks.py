@@ -43,6 +43,7 @@ def test_config(tmp_path):
         auth_token=None,
         read_only=False,
         webhooks_enabled=True,
+        sync_interval=0,
     )
 
 

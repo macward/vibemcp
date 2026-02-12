@@ -19,6 +19,7 @@ class Config:
     auth_token: str | None
     read_only: bool
     webhooks_enabled: bool
+    sync_interval: int
 
     @classmethod
     def from_env(cls, read_only_override: bool | None = None) -> "Config":
@@ -62,6 +63,15 @@ class Config:
             "no",
         )
 
+        # Sync interval in seconds (0 to disable)
+        sync_interval_str = os.getenv("VIBE_SYNC_INTERVAL", "30")
+        try:
+            sync_interval = int(sync_interval_str)
+            if sync_interval < 0:
+                raise ValueError(f"Sync interval must be >= 0, got {sync_interval}")
+        except ValueError as e:
+            raise ValueError(f"Invalid VIBE_SYNC_INTERVAL value '{sync_interval_str}': {e}") from e
+
         return cls(
             vibe_root=vibe_root,
             vibe_port=vibe_port,
@@ -69,6 +79,7 @@ class Config:
             auth_token=auth_token,
             read_only=read_only,
             webhooks_enabled=webhooks_enabled,
+            sync_interval=sync_interval,
         )
 
 
