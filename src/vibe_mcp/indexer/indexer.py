@@ -201,6 +201,7 @@ class Indexer:
             status=metadata.status,
             owner=metadata.owner,
             tags=metadata.tags or [],
+            feature=metadata.feature,
             content_hash=file_info.content_hash,
             mtime=file_info.mtime,
             updated=updated_str,

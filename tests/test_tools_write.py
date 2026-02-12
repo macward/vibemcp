@@ -494,3 +494,88 @@ class TestInitProject:
 
         assert "absolute_path" in result
         assert result["absolute_path"] == str(test_vibe_root / "myproject")
+
+
+class TestFeatureSupport:
+    """Tests for feature-based task and plan organization."""
+
+    def test_create_task_with_feature(self, test_vibe_root):
+        """Test creating a task with a feature tag."""
+        result = create_task(
+            project="test_project",
+            title="Auth bearer token",
+            objective="Implement bearer token auth",
+            feature="auth",
+        )
+
+        assert result["status"] == "created"
+        assert result["feature"] == "auth"
+
+        file_path = test_vibe_root / "test_project" / "tasks" / "001-auth-bearer-token.md"
+        content = file_path.read_text()
+
+        # Check frontmatter with feature
+        assert "---" in content
+        assert "type: task" in content
+        assert "status: pending" in content
+        assert "feature: auth" in content
+
+    def test_create_task_without_feature_no_frontmatter(self, test_vibe_root):
+        """Test that tasks without feature don't have frontmatter."""
+        create_task(
+            project="test_project",
+            title="Simple task",
+            objective="Do something",
+        )
+
+        file_path = test_vibe_root / "test_project" / "tasks" / "001-simple-task.md"
+        content = file_path.read_text()
+
+        # Without feature, no frontmatter (starts with #)
+        assert content.startswith("# Task:")
+        assert "---" not in content.split("\n")[0]
+
+    def test_create_plan_with_filename(self, test_vibe_root):
+        """Test creating a plan with custom filename."""
+        content = "# Feature: Auth\n\nAuth feature plan."
+        result = create_plan(
+            project="test_project",
+            content=content,
+            filename="feature-auth.md",
+        )
+
+        assert result["status"] == "created"
+        assert result["filename"] == "feature-auth.md"
+        assert result["path"] == "test_project/plans/feature-auth.md"
+
+        file_path = test_vibe_root / "test_project" / "plans" / "feature-auth.md"
+        assert file_path.exists()
+        assert file_path.read_text() == content
+
+    def test_create_plan_adds_md_extension(self, test_vibe_root):
+        """Test that .md extension is added to plan filename if missing."""
+        result = create_plan(
+            project="test_project",
+            content="# Plan",
+            filename="feature-deploy",
+        )
+
+        assert result["filename"] == "feature-deploy.md"
+        file_path = test_vibe_root / "test_project" / "plans" / "feature-deploy.md"
+        assert file_path.exists()
+
+    def test_create_plan_prevents_path_traversal(self, test_vibe_root):
+        """Test that directory traversal in filename is prevented."""
+        with pytest.raises(ValueError, match="cannot contain path separators"):
+            create_plan(
+                project="test_project",
+                content="# Evil",
+                filename="../evil.md",
+            )
+
+        with pytest.raises(ValueError, match="cannot contain path separators"):
+            create_plan(
+                project="test_project",
+                content="# Evil",
+                filename="foo/bar.md",
+            )

@@ -145,3 +145,27 @@ Status: pending
         data, body = parse_frontmatter(content, "project/tasks/001-test.md")
         assert body == content  # No frontmatter, body is full content
         assert data.status == "pending"  # Extracted from body
+
+    def test_extracts_feature_from_frontmatter(self):
+        content = """---
+type: task
+status: pending
+feature: auth
+---
+# Task: Auth Bearer Token
+
+## Objective
+Implement bearer token."""
+        data, body = parse_frontmatter(content, "project/tasks/017-auth-bearer.md")
+        assert data.feature == "auth"
+        assert data.type == "task"
+        assert data.status == "pending"
+
+    def test_feature_none_when_not_present(self):
+        content = """---
+type: task
+status: pending
+---
+# Task: No Feature"""
+        data, _ = parse_frontmatter(content, "project/tasks/001-test.md")
+        assert data.feature is None

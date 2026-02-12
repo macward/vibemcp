@@ -12,6 +12,7 @@ from vibe_mcp.indexer import Database, Indexer
 from vibe_mcp.prompts import register_prompts
 from vibe_mcp.resources import register_resources
 from vibe_mcp.tools import register_tools
+from vibe_mcp.tools_webhooks import register_tools_webhooks
 from vibe_mcp.tools_write import register_tools_write
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,9 @@ def create_server(read_only: bool | None = None) -> FastMCP:
     logger.info("Registering write tools...")
     register_tools_write(mcp)
 
+    logger.info("Registering webhook tools...")
+    register_tools_webhooks(mcp)
+
     logger.info("Registering prompts...")
     register_prompts(mcp)
 
@@ -111,6 +115,7 @@ def main() -> None:
     logger.info("  VIBE_DB:   %s", config.vibe_db)
     logger.info("  AUTH:      %s", "enabled" if config.auth_token else "disabled")
     logger.info("  READ_ONLY: %s", config.read_only)
+    logger.info("  WEBHOOKS:  %s", "enabled" if config.webhooks_enabled else "disabled")
     logger.info("=" * 50)
 
     # Force reindex if requested
