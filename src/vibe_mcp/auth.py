@@ -28,12 +28,14 @@ class BearerTokenVerifier(TokenVerifier):
     on all MCP requests when VIBE_AUTH_TOKEN is configured.
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, base_url: str | None = None):
         """Initialize verifier with config.
 
         Args:
             config: Config instance with auth_token
+            base_url: Optional base URL for OAuth metadata (e.g., http://localhost:8000)
         """
+        super().__init__(base_url=base_url)
         self._config = config
 
     async def verify_token(self, token: str) -> AccessToken | None:
@@ -91,7 +93,8 @@ def get_auth_provider(config: Config | None = None) -> BearerTokenVerifier | Non
         config = get_config()
 
     if config.auth_token is not None:
-        return BearerTokenVerifier(config)
+        base_url = f"http://0.0.0.0:{config.vibe_port}"
+        return BearerTokenVerifier(config, base_url=base_url)
 
     return None
 
